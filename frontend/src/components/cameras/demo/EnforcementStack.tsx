@@ -1,0 +1,302 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import {
+  AlertOctagon,
+  CheckCircle2,
+  FileImage,
+  ShieldAlert,
+  ShieldCheck,
+  Sparkles,
+} from "lucide-react";
+
+import { cn, formatCurrency } from "@/lib/utils";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
+export interface ComplianceCheck {
+  status: string;
+  detail?: string;
+  expiry?: string;
+}
+
+export interface ComplianceBundle {
+  plate?: string;
+  vehicle_known?: boolean;
+  risk_score?: number;
+  risk_band?: string;
+  enforcement_action?: string;
+  registration?: ComplianceCheck;
+  insurance?: ComplianceCheck;
+  puc?: ComplianceCheck;
+  blacklist?: ComplianceCheck;
+  open_violations?: number;
+  outstanding_fine_total?: number;
+  vehicle?: { make?: string | null; model?: string | null; color?: string | null; year?: number | null };
+  owner?: { name?: string | null; city?: string | null };
+}
+
+export interface EnforcementCard {
+  id: string;
+  receivedAt: number;
+  plate: string;
+  ocrConfidence?: number;
+  compliance: ComplianceBundle;
+  /** Evidence image paths — populated when evidence_saved WS event arrives */
+  framePath?: string | null;
+  plateCropPath?: string | null;
+}
+
+interface Props {
+  cards: EnforcementCard[];
+}
+
+/**
+ * Right-side sliding stack of enforcement events. Each card shows the
+ * 4-up compliance matrix, a radial risk gauge, vehicle + owner identity,
+ * and a typewriter-effect challan ID for high-risk vehicles.
+ */
+export function EnforcementStack({ cards }: Props) {
+  return (
+    <section className="surface-panel h-full flex flex-col min-h-[640px]">
+      <header className="px-4 sm:px-5 pt-4 pb-3 border-b border-border">
+        <p className="section-eyebrow">Enforcement queue</p>
+        <h3 className="mt-0.5 font-display text-sm font-semibold text-foreground tracking-tight">
+          Live AI decisions
+        </h3>
+      </header>
+
+      <ol className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3">
+        {cards.length === 0 ? (
+          <li className="px-6 py-12 text-center text-xs text-foreground-subtle">
+            Decisions appear here when the OCR engine resolves a plate from the live feed.
+          </li>
+        ) : (
+          <AnimatePresence initial={false}>
+            {cards.slice(0, 14).map((card) => (
+              <motion.li
+                key={card.id}
+                layout="position"
+                initial={{ opacity: 0, x: 32 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 16 }}
+                transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
+              >
+                <EnforcementCardView card={card} />
+              </motion.li>
+            ))}
+          </AnimatePresence>
+        )}
+      </ol>
+    </section>
+  );
+}
+
+function EnforcementCardView({ card }: { card: EnforcementCard }) {
+  const c = card.compliance;
+  const risk = c.risk_score ?? 0;
+  const band = c.risk_band ?? "CLEAR";
+  const isViolation = risk >= 30;
+
+  const tone =
+    risk >= 80
+      ? { border: "border-peach-300", chip: "bg-peach-100 text-peach-900 ring-peach-200" }
+      : risk >= 55
+      ? { border: "border-peach-200", chip: "bg-peach-100 text-peach-900 ring-peach-200" }
+      : risk >= 30
+      ? { border: "border-bronze-200", chip: "bg-bronze-100 text-bronze-900 ring-bronze-200" }
+      : { border: "border-sage-200", chip: "bg-sage-100 text-sage-900 ring-sage-200" };
+
+  const plateSrc = card.plateCropPath ? `${API_URL}/uploads/${card.plateCropPath}` : null;
+
+  return (
+    <div className={cn("rounded-xl border bg-surface p-3.5 shadow-card", tone.border)}>
+      {/* Header */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="plate-chip text-[0.78125rem] py-0.5">{card.plate}</span>
+            <span
+              className={cn(
+                "inline-flex items-center gap-1 rounded-md ring-1 px-1.5 h-5 text-2xs font-semibold uppercase tracking-[0.12em]",
+                tone.chip
+              )}
+            >
+              {isViolation ? <ShieldAlert className="h-3 w-3" /> : <ShieldCheck className="h-3 w-3" />}
+              {band}
+            </span>
+          </div>
+          {(c.vehicle?.make || c.vehicle?.model) && (
+            <p className="mt-1 text-xs text-foreground-muted truncate">
+              {[c.vehicle?.make, c.vehicle?.model, c.vehicle?.color, c.vehicle?.year]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
+          )}
+          {c.owner?.name && (
+            <p className="text-2xs text-foreground-subtle truncate">
+              Registered to {c.owner.name}
+              {c.owner.city ? ` · ${c.owner.city}` : ""}
+            </p>
+          )}
+        </div>
+
+        <div className="flex items-start gap-2 shrink-0">
+          {/* Plate crop thumbnail */}
+          <div className="h-12 w-20 rounded-md overflow-hidden bg-stone-100 border border-stone-200 relative shrink-0">
+            {plateSrc ? (
+              <img src={plateSrc} alt={card.plate} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+            ) : (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <FileImage className="h-4 w-4 text-stone-300" />
+              </div>
+            )}
+          </div>
+          <RiskGauge value={risk} />
+        </div>
+      </div>
+
+      {/* Compliance matrix */}
+      <div className="mt-3 grid grid-cols-2 gap-1.5">
+        <CheckPill label="Registration" check={c.registration} />
+        <CheckPill label="Insurance" check={c.insurance} />
+        <CheckPill label="PUC" check={c.puc} />
+        <CheckPill label="Watchlist" check={c.blacklist} />
+      </div>
+
+      {/* Action banner */}
+      <div className="mt-3 flex items-center justify-between gap-2 rounded-lg bg-stone-50 border border-border px-2.5 py-2">
+        <span className="inline-flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.14em] text-foreground-muted">
+          <Sparkles className="h-3 w-3" />
+          AI action
+        </span>
+        <span
+          className={cn(
+            "font-mono text-xs font-semibold",
+            isViolation ? "text-peach-800" : "text-sage-800"
+          )}
+        >
+          {humanizeAction(c.enforcement_action)}
+        </span>
+      </div>
+
+      {/* Auto-challan */}
+      {risk >= 55 && (
+        <div className="mt-2 rounded-lg bg-peach-50 border border-peach-200 px-2.5 py-2 flex items-center justify-between gap-2">
+          <span className="inline-flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.14em] text-peach-800">
+            <AlertOctagon className="h-3 w-3" />
+            Auto-challan
+          </span>
+          <TypewriterChallan seed={card.id} />
+        </div>
+      )}
+
+      {c.outstanding_fine_total && c.outstanding_fine_total > 0 ? (
+        <p className="mt-2 text-2xs text-foreground-subtle font-mono">
+          Outstanding · {formatCurrency(c.outstanding_fine_total)} across {c.open_violations} unpaid
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+// ── Pieces ──────────────────────────────────────────────────────────
+
+function CheckPill({ label, check }: { label: string; check?: ComplianceCheck }) {
+  const status = check?.status ?? "UNKNOWN";
+  const cfg = {
+    VALID:         { color: "bg-sage-50 text-sage-800 border-sage-200",     icon: CheckCircle2 },
+    EXPIRING_SOON: { color: "bg-bronze-50 text-bronze-800 border-bronze-200", icon: AlertOctagon },
+    EXPIRED:       { color: "bg-peach-50 text-peach-800 border-peach-200",  icon: AlertOctagon },
+    MISSING:       { color: "bg-stone-100 text-foreground-muted border-border", icon: AlertOctagon },
+    CLEAR:         { color: "bg-sage-50 text-sage-800 border-sage-200",     icon: CheckCircle2 },
+    FLAGGED:       { color: "bg-peach-50 text-peach-800 border-peach-200",  icon: AlertOctagon },
+    OUTSTANDING:   { color: "bg-bronze-50 text-bronze-800 border-bronze-200", icon: AlertOctagon },
+    UNKNOWN:       { color: "bg-stone-100 text-foreground-muted border-border", icon: AlertOctagon },
+  }[status] ?? { color: "bg-stone-100 text-foreground-muted border-border", icon: AlertOctagon };
+  const Icon = cfg.icon;
+
+  return (
+    <div className={cn("flex items-center gap-1.5 rounded-md border px-2 py-1.5", cfg.color)}>
+      <Icon className="h-3 w-3 shrink-0" />
+      <div className="min-w-0">
+        <p className="text-2xs font-semibold uppercase tracking-[0.12em] leading-tight">{label}</p>
+        <p className="text-2xs leading-tight truncate">{status.replace("_", " ")}</p>
+      </div>
+    </div>
+  );
+}
+
+function RiskGauge({ value }: { value: number }) {
+  const radius = 18;
+  const stroke = 4;
+  const c = 2 * Math.PI * radius;
+  const offset = c - (value / 100) * c;
+
+  const color = value >= 80 ? "#B95C5C" : value >= 55 ? "#ED9F7E" : value >= 30 ? "#BD8658" : "#7F8876";
+
+  return (
+    <div className="relative h-12 w-12 shrink-0">
+      <svg viewBox="0 0 48 48" className="h-12 w-12 -rotate-90">
+        <circle cx="24" cy="24" r={radius} stroke="hsl(45 12% 88%)" strokeWidth={stroke} fill="none" />
+        <motion.circle
+          cx="24"
+          cy="24"
+          r={radius}
+          stroke={color}
+          strokeWidth={stroke}
+          fill="none"
+          strokeLinecap="round"
+          strokeDasharray={c}
+          initial={{ strokeDashoffset: c }}
+          animate={{ strokeDashoffset: offset }}
+          transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="font-display text-sm font-semibold tabular-nums text-foreground leading-none">
+          {value}
+        </span>
+        <span className="text-[0.5rem] font-mono uppercase tracking-[0.14em] text-foreground-subtle mt-0.5">
+          RISK
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function TypewriterChallan({ seed }: { seed: string }) {
+  const final = "CHN-" + new Date().toISOString().slice(2, 7).replace("-", "") + "-" + seed.slice(0, 5).toUpperCase();
+  const [text, setText] = useState("");
+
+  useEffect(() => {
+    setText("");
+    let i = 0;
+    const id = setInterval(() => {
+      i += 1;
+      setText(final.slice(0, i));
+      if (i >= final.length) clearInterval(id);
+    }, 28);
+    return () => clearInterval(id);
+  }, [final]);
+
+  return (
+    <span className="font-mono text-xs font-semibold text-peach-900 tabular-nums">
+      {text}
+      <span className="ml-0.5 inline-block w-1 h-3 align-[-2px] bg-peach-900 animate-pulse" />
+    </span>
+  );
+}
+
+function humanizeAction(action: string | undefined): string {
+  switch (action) {
+    case "IMPOUND_RECOMMENDED": return "Impound recommended";
+    case "CITATE_AND_FLAG":     return "Citate + flag";
+    case "ISSUE_CHALLAN":       return "Issue challan";
+    case "VERIFY_OWNER":        return "Verify owner";
+    case "ADVISE_ONLY":         return "Advise only";
+    case "PASS":                return "Pass";
+    default:                    return action ?? "—";
+  }
+}
