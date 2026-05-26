@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="sky-09-night-capture" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0"   stop-color="#0c1118"/>
+      <stop offset="0.65" stop-color="#152130"/>
+      <stop offset="1"   stop-color="#070a0e"/>
+    </linearGradient>
+    <linearGradient id="road-09-night-capture" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#070a0e"/>
+      <stop offset="1" stop-color="#0c0e0c"/>
+    </linearGradient>
+    <pattern id="grid-09-night-capture" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#5d7a98" stroke-width="0.4" opacity="0.18"/>
+    </pattern>
+  </defs>
+
+  <!-- Sky / background -->
+  <rect width="800" height="450" fill="url(#sky-09-night-capture)"/>
+  <rect width="800" height="450" fill="#0a1828" opacity="0.18"/>
+  <rect width="800" height="450" fill="url(#grid-09-night-capture)"/>
+
+  <!-- Skyline silhouette -->
+  <path d="M 0 280 L 80 280 L 90 245 L 130 245 L 140 220 L 200 220 L 210 250 L 260 250 L 270 235 L 340 235 L 350 215 L 420 215 L 430 240 L 500 240 L 510 220 L 580 220 L 590 250 L 650 250 L 660 230 L 740 230 L 750 260 L 800 260 L 800 280 Z"
+        fill="#000" opacity="0.40"/>
+
+  <!-- Road -->
+  <rect x="0" y="320" width="800" height="130" fill="url(#road-09-night-capture)"/>
+  <line x1="0" y1="345" x2="800" y2="345" stroke="#5d7a98" stroke-width="2" stroke-dasharray="50,28" opacity="0.55"/>
+  <line x1="0" y1="395" x2="800" y2="395" stroke="#5d7a98" stroke-width="2" stroke-dasharray="50,28" opacity="0.40"/>
+
+  <!-- Vehicle -->
+  <g>
+    <path d="M 250 295 L 265 205 L 360 195 L 460 195 L 540 200 L 565 230 L 570 295 Z" fill="#1a2330" stroke="#000" stroke-width="2"/>
+    
+            <path d="M 305 240 L 330 220 L 500 220 L 525 240 Z" fill="rgba(180,200,210,0.18)"/>
+            <rect x="265" y="270" width="8" height="14" fill="rgba(255,235,180,0.55)" rx="2"/>
+            <rect x="552" y="270" width="8" height="14" fill="rgba(255,90,90,0.55)" rx="2"/>
+        
+    
+        <circle cx="305" cy="305" r="22" fill="#0a0c0a" stroke="#000" stroke-width="1.5"/>
+        <circle cx="305" cy="305" r="9"  fill="#2a2e2a"/>
+        <circle cx="510" cy="305" r="22" fill="#0a0c0a" stroke="#000" stroke-width="1.5"/>
+        <circle cx="510" cy="305" r="9"  fill="#2a2e2a"/>
+    
+  </g>
+
+  <!-- Plate -->
+  <g>
+    <rect x="365" y="298" width="100" height="26" rx="3" fill="#f7f1de" stroke="#0a0a0a" stroke-width="1.6"/>
+    <rect x="365" y="298" width="100" height="6"  fill="#0c2d6b"/>
+    <text x="370" y="303.5" font-family="monospace" font-size="5"   font-weight="900" fill="#fff">IND</text>
+    <text x="415" y="319"   text-anchor="middle"
+          font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+          font-size="14.5" font-weight="900" fill="#0a0a0a" letter-spacing="0.5">MH03LD6042</text>
+  </g>
+
+  <!-- Detection bbox -->
+  <g>
+    <rect x="240" y="180" width="320" height="160" fill="none" stroke="#9ec2e0" stroke-width="1.8"
+          stroke-dasharray="6,4" opacity="0.85"/>
+    <rect x="240" y="164" width="148" height="18" fill="#9ec2e0" opacity="0.85"/>
+    <text x="246" y="177" font-family="monospace" font-size="11" font-weight="800" fill="#000">VEHICLE  0.79</text>
+  </g>
+
+  <!-- Plate sub-bbox -->
+  <rect x="358" y="293" width="114" height="36" fill="none" stroke="#9ec2e0" stroke-width="1" opacity="0.55" stroke-dasharray="3,3"/>
+
+  <!-- HUD overlays -->
+  <text x="22" y="32"  font-family="monospace" font-size="13.5" font-weight="800" fill="#9ec2e0">MUM-WSF-01</text>
+  <text x="22" y="48"  font-family="monospace" font-size="10"   font-weight="600" fill="#5d7a98" letter-spacing="1.3">SURVEILLANCE · INTELLIGENCE · ENFORCEMENT</text>
+
+  <circle cx="755" cy="27" r="4.5" fill="#d23a3a">
+    <animate attributeName="opacity" values="1;0.35;1" dur="1.6s" repeatCount="indefinite"/>
+  </circle>
+  <text x="745" y="32" text-anchor="end" font-family="monospace" font-size="12" font-weight="800" fill="#d23a3a">REC</text>
+
+  <text x="22"  y="438" font-family="monospace" font-size="11" fill="#5d7a98" letter-spacing="0.8">25/05/2026 · 23:58:11 IST</text>
+  <text x="778" y="438" text-anchor="end" font-family="monospace" font-size="11" fill="#5d7a98">1920 × 1080 · 30 FPS</text>
+
+  <!-- Crosshair -->
+  <g stroke="#5d7a98" stroke-width="1" opacity="0.40">
+    <line x1="395" y1="100" x2="405" y2="100"/>
+    <line x1="400" y1="95"  x2="400" y2="105"/>
+  </g>
+
+  
+        <text x="400" y="135" text-anchor="middle" font-family="monospace" font-size="11" font-weight="700"
+              letter-spacing="4" fill="#5d7a98" opacity="0.55">LOW-LIGHT ENHANCEMENT · CLAHE PIPELINE</text>
+    
+  
+        <text x="400" y="155" text-anchor="middle" font-family="monospace" font-size="10" font-weight="600"
+              letter-spacing="2" fill="#5d7a98" opacity="0.70">EXPIRED PUC · EMISSIONS</text>
+    
+</svg>

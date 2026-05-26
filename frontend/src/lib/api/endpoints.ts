@@ -109,6 +109,96 @@ export const settingsApi = {
   updateOne: (key: string, value: string) => apiClient.put(`/settings/${key}`, { value }),
 };
 
+// ── Controlled Demo Replay ───────────────────────────────────────
+
+export interface DemoCaseSummary {
+  id: string;
+  title: string;
+  subtitle: string;
+  image: string;
+  thumbnail_caption: string;
+  plate: string;
+  severity: "info" | "low" | "medium" | "high" | "critical";
+  is_violation: boolean;
+  violation_type: string | null;
+  threat_score: number;
+  camera_code: string;
+  location: string;
+  ocr_confidence: number;
+  vehicle_category: string;
+  vehicle_make: string;
+  vehicle_model: string;
+}
+
+export interface DemoStage {
+  key: string;
+  label: string;
+  latency_ms: number;
+  detail: string;
+}
+
+export interface DemoReplayPayload {
+  case_id: string;
+  case_title: string;
+  case_subtitle: string;
+  image: string;
+  detection_id: string;
+  challan_id: string | null;
+  challan_number: string | null;
+  camera: { id: string; code: string; name: string; location: string };
+  vehicle: {
+    plate: string; category: string; make: string;
+    model: string; color: string; year: number;
+  };
+  owner: { name: string; phone: string; email: string; city: string };
+  outcome: {
+    is_violation: boolean;
+    violation_type: string | null;
+    fine_amount_inr: number;
+    severity: "info" | "low" | "medium" | "high" | "critical";
+    threat_score: number;
+  };
+  compliance: {
+    registration: boolean; insurance: boolean;
+    puc: boolean; blacklist: boolean;
+  };
+  telemetry: {
+    ocr_confidence: number;
+    vehicle_confidence: number;
+    plate_confidence: number;
+    frame_quality: number;
+    ocr_engine: string;
+    total_latency_ms: number;
+  };
+  history: {
+    detections_30d: number;
+    repeat_offences: number;
+    last_district: string;
+    encounter_history: Array<{ date: string; camera: string; result: string }>;
+  };
+  bounding_box: { x1: number; y1: number; x2: number; y2: number };
+  plate_bounding_box: { x1: number; y1: number; x2: number; y2: number };
+  stages: DemoStage[];
+  decision_trace: DecisionSignal[];
+  timestamp: string;
+}
+
+export interface DecisionSignal {
+  signal: string;
+  source: string;
+  evidence: string;
+  weight: number;
+  contribution: number;
+  outcome: "PASS" | "FLAG" | "CRITICAL" | "RECOVERED" | "ENHANCED";
+}
+
+export const demoApi = {
+  cases: () =>
+    apiClient.get<{ cases: DemoCaseSummary[] }>("/demo/cases").then((r) => r.data.cases),
+  replay: (caseId: string) =>
+    apiClient.post<DemoReplayPayload>(`/demo/replay/${caseId}`).then((r) => r.data),
+};
+
 // ── Health (root endpoint, no auth needed) ───────────────────────
 const _API_URL_RAW = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 

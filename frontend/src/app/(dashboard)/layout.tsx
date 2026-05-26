@@ -10,6 +10,8 @@ import { getAccessToken } from "@/lib/api/client";
 import { log } from "@/lib/diagnostics/logger";
 import { Button } from "@/components/ui/button";
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
+import { useNotificationBus } from "@/lib/hooks/useNotificationBus";
+import { IncidentResponseOverlay } from "@/components/shared/incident/IncidentResponseOverlay";
 
 /**
  * Auth gate for /dashboard/* — three-state recovery machine.
@@ -31,6 +33,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const { isAuthenticated, fetchMe, user } = useAuthStore();
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>("checking");
+
+  // ── Global operational event bus ──────────────────────────────────
+  // Singleton WS subscription. Re-mounted only when this layout itself
+  // mounts/unmounts, so navigation between dashboard pages doesn't churn
+  // the connection. Internally gated on `isAuthenticated`.
+  useNotificationBus();
   const attemptRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -124,6 +132,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <main className="flex-1 min-w-0 flex flex-col overflow-x-hidden">
         <ErrorBoundary label="dashboard-view">{children}</ErrorBoundary>
       </main>
+      {/* Cinematic critical-event overlay (auto-mounts on high/critical events) */}
+      <IncidentResponseOverlay />
     </div>
   );
 }

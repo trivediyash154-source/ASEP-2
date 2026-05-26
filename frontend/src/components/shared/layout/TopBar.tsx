@@ -1,18 +1,23 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import {
+  AlertOctagon,
   AlertTriangle,
   Bell,
   Camera,
   CheckCircle2,
   ChevronDown,
   Cpu,
+  FileText,
+  Fingerprint,
   HelpCircle,
   Keyboard,
   Radio,
   Search,
   ShieldAlert,
+  Sparkles,
   WifiOff,
   X,
   Zap,
@@ -21,6 +26,14 @@ import { AnimatePresence, motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { useWebSocket } from "@/lib/hooks/useWebSocket";
 import { useAuthStore } from "@/lib/stores/auth.store";
+import {
+  useNotificationsStore,
+  selectFilteredEvents,
+  selectUnreadCount,
+  type NotificationKind,
+  type NotificationSeverity,
+  type OperationalEvent,
+} from "@/lib/stores/notifications.store";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
 import {
@@ -31,7 +44,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
-import { format } from "date-fns";
+import { formatDistanceToNowStrict } from "date-fns";
 
 interface TopBarProps {
   title: string;
@@ -40,34 +53,53 @@ interface TopBarProps {
   actions?: React.ReactNode;
 }
 
-/* ── Notification data ──────────────────────────────────────────────── */
-type NotifKind = "detection" | "violation" | "camera" | "system" | "challan";
+/* ── Notification visual config ──────────────────────────────────────── */
 
-interface Notif {
-  id: string;
-  kind: NotifKind;
-  title: string;
-  detail: string;
-  ts: Date;
-  read: boolean;
-}
-
-const SEED_NOTIFS: Notif[] = [
-  { id: "n1", kind: "violation",  title: "CRITICAL: MH12AB1234",      detail: "Expired insurance — challan auto-generated",   ts: new Date(Date.now() - 1000 * 60 * 2),  read: false },
-  { id: "n2", kind: "detection",  title: "High-confidence detection",  detail: "Plate MH14CD5678 — OCR 97% — Thane NH-3",     ts: new Date(Date.now() - 1000 * 60 * 5),  read: false },
-  { id: "n3", kind: "challan",    title: "Challan CH-0842 issued",     detail: "₹2,000 · Expired permit · MH04EF9012",         ts: new Date(Date.now() - 1000 * 60 * 11), read: false },
-  { id: "n4", kind: "camera",     title: "Camera CAM-003 degraded",    detail: "Stream quality dropped below threshold",        ts: new Date(Date.now() - 1000 * 60 * 22), read: true  },
-  { id: "n5", kind: "system",     title: "AI pipeline latency spike",  detail: "Processing time +38ms vs baseline",             ts: new Date(Date.now() - 1000 * 60 * 35), read: true  },
-  { id: "n6", kind: "violation",  title: "Repeat offender flagged",    detail: "MH20GH3456 — 4th violation this month",         ts: new Date(Date.now() - 1000 * 60 * 58), read: true  },
-];
-
-const NOTIF_CFG: Record<NotifKind, { icon: React.ElementType; color: string; badge: string }> = {
-  detection: { icon: Radio,       color: "text-sage-600 dark:text-sage-400",   badge: "bg-sage-100 dark:bg-sage-800/40" },
-  violation: { icon: ShieldAlert, color: "text-peach-600 dark:text-peach-400", badge: "bg-peach-50 dark:bg-peach-900/30" },
-  camera:    { icon: Camera,      color: "text-bronze-600 dark:text-bronze-400", badge: "bg-bronze-50 dark:bg-bronze-900/30" },
-  system:    { icon: Cpu,         color: "text-foreground-muted",               badge: "bg-muted" },
-  challan:   { icon: CheckCircle2, color: "text-sage-700 dark:text-sage-400",   badge: "bg-sage-50 dark:bg-sage-900/20" },
+const KIND_CFG: Record<NotificationKind, { icon: React.ElementType; label: string }> = {
+  detection:       { icon: Radio,       label: "Detection" },
+  challan_issued:  { icon: FileText,    label: "Challan issued" },
+  blacklist_hit:   { icon: ShieldAlert, label: "Blacklist hit" },
+  repeat_offender: { icon: AlertTriangle, label: "Repeat offender" },
+  stolen_match:    { icon: AlertOctagon, label: "BOLO match" },
+  ocr_recovery:    { icon: Sparkles,    label: "OCR recovery" },
+  camera_offline:  { icon: Camera,      label: "Camera offline" },
+  system_warning:  { icon: Cpu,         label: "System warning" },
+  system_error:    { icon: AlertOctagon, label: "System error" },
 };
+
+const SEVERITY_CFG: Record<NotificationSeverity, {
+  badge: string;       // tailwind background + border for the icon block
+  iconClass: string;   // icon color
+  chip: string;        // chip color for severity label
+  glow: string;        // outer glow (used by unread + critical events)
+  label: string;
+}> = {
+  info:     { badge: "bg-sage-100 dark:bg-sage-800/30 border border-sage-300/40", iconClass: "text-sage-700 dark:text-sage-200",
+              chip: "bg-sage-500/15 text-sage-800 dark:text-sage-200",
+              glow: "shadow-[0_0_0_1px_rgba(127,136,118,0.18)]", label: "INFO" },
+  low:      { badge: "bg-peach-100 dark:bg-peach-900/30 border border-peach-300/40", iconClass: "text-peach-700 dark:text-peach-200",
+              chip: "bg-peach-500/15 text-peach-800 dark:text-peach-100",
+              glow: "shadow-[0_0_0_1px_rgba(237,159,126,0.18)]", label: "LOW" },
+  medium:   { badge: "bg-peach-200/60 dark:bg-peach-900/40 border border-peach-400/50", iconClass: "text-peach-800 dark:text-peach-100",
+              chip: "bg-peach-500/22 text-peach-800 dark:text-peach-100",
+              glow: "shadow-[0_0_0_1px_rgba(237,159,126,0.28)]", label: "MED" },
+  high:     { badge: "bg-[#bd8658]/15 border border-[#bd8658]/40", iconClass: "text-[#7a4a28] dark:text-[#fcc99a]",
+              chip: "bg-[#bd8658]/20 text-[#7a4a28] dark:text-[#fcc99a]",
+              glow: "shadow-[0_0_0_1px_rgba(189,134,88,0.34)]", label: "HIGH" },
+  critical: { badge: "bg-status-danger/15 border border-status-danger/40", iconClass: "text-status-danger",
+              chip: "bg-status-danger/15 text-status-danger",
+              glow: "shadow-[0_0_18px_-6px_var(--status-danger,#d23a3a)]", label: "CRIT" },
+  system:   { badge: "bg-stone-100 dark:bg-stone-800/40 border border-border", iconClass: "text-foreground-muted",
+              chip: "bg-stone-500/15 text-foreground-muted",
+              glow: "", label: "SYS" },
+};
+
+const SEVERITY_FILTER_OPTIONS: Array<{ id: NotificationSeverity[] | "all"; label: string }> = [
+  { id: "all",                          label: "All" },
+  { id: ["critical", "high"],           label: "High risk" },
+  { id: ["medium"],                     label: "Medium" },
+  { id: ["info", "low", "ocr_recovery" as never] as NotificationSeverity[], label: "Info" },
+];
 
 const SHORTCUTS = [
   { key: "F",     desc: "Toggle tactical fullscreen wall" },
@@ -86,12 +118,41 @@ const PIPELINE_STATUS = [
 ];
 
 /* ── Notification Center ────────────────────────────────────────────── */
-function NotificationCenter({ onClose }: { onClose: () => void }) {
-  const [notifs, setNotifs] = useState(SEED_NOTIFS);
-  const unread = notifs.filter(n => !n.read).length;
 
-  const markAll = () => setNotifs(n => n.map(x => ({ ...x, read: true })));
-  const dismiss = (id: string) => setNotifs(n => n.filter(x => x.id !== id));
+function severityMatches(target: NotificationSeverity[] | "all", s: NotificationSeverity): boolean {
+  if (target === "all") return true;
+  return target.includes(s);
+}
+
+function NotificationCenter({ onClose }: { onClose: () => void }) {
+  const router = useRouter();
+  const events       = useNotificationsStore(selectFilteredEvents);
+  const total        = useNotificationsStore((s) => s.events.length);
+  const filterSev    = useNotificationsStore((s) => s.filterSeverity);
+  const filterDist   = useNotificationsStore((s) => s.filterDistrict);
+  const markRead     = useNotificationsStore((s) => s.markRead);
+  const markAllRead  = useNotificationsStore((s) => s.markAllRead);
+  const dismiss      = useNotificationsStore((s) => s.dismiss);
+  const clearAll     = useNotificationsStore((s) => s.clearAll);
+  const setFilterSev = useNotificationsStore((s) => s.setFilterSeverity);
+  const setFilterDist = useNotificationsStore((s) => s.setFilterDistrict);
+
+  const unread = useNotificationsStore(selectUnreadCount);
+
+  const districts = useMemo(() => {
+    const counts = new Map<string, number>();
+    useNotificationsStore.getState().events.forEach((e) => {
+      if (e.district) counts.set(e.district, (counts.get(e.district) ?? 0) + 1);
+    });
+    return Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 6);
+  }, [total]);
+
+  function openEvidence(e: OperationalEvent) {
+    if (!e.detection_id) return;
+    router.push(`/evidence?detection=${e.detection_id}`);
+    markRead(e.id);
+    onClose();
+  }
 
   return (
     <motion.div
@@ -100,91 +161,222 @@ function NotificationCenter({ onClose }: { onClose: () => void }) {
       exit={{ opacity: 0, y: -8, scale: 0.97 }}
       transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
       className={cn(
-        "absolute right-0 top-full mt-2 w-[400px] z-50",
+        "absolute right-0 top-full mt-2 w-[440px] max-w-[94vw] z-50",
         "bg-surface border border-border rounded-xl shadow-popover overflow-hidden"
       )}
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
-        <div className="flex items-center gap-2">
-          <Bell className="h-4 w-4 text-foreground-muted" />
-          <span className="text-sm font-semibold text-foreground">Notifications</span>
-          {unread > 0 && (
-            <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-peach-500 text-white text-2xs font-bold px-1.5">
-              {unread}
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          {unread > 0 && (
-            <button
-              onClick={markAll}
-              className="text-2xs text-sage-600 dark:text-sage-400 hover:underline font-semibold"
-            >
-              Mark all read
+      <div className="px-4 py-3 border-b border-border">
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <div className="flex items-center gap-2">
+            <Bell className="h-4 w-4 text-foreground-muted" />
+            <span className="text-sm font-semibold text-foreground">Intelligence feed</span>
+            {unread > 0 && (
+              <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-peach-500 text-white text-2xs font-bold px-1.5">
+                {unread}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5">
+            {unread > 0 && (
+              <button
+                onClick={markAllRead}
+                className="inline-flex items-center h-6 px-1.5 rounded text-2xs font-semibold text-sage-700 dark:text-sage-300 hover:bg-sage-500/10 transition-colors"
+              >
+                Mark all read
+              </button>
+            )}
+            {total > 0 && (
+              <button
+                onClick={clearAll}
+                className="inline-flex items-center h-6 px-1.5 rounded text-2xs font-semibold text-foreground-subtle hover:text-foreground hover:bg-muted/60 transition-colors"
+              >
+                Clear
+              </button>
+            )}
+            <button onClick={onClose} className="p-1 rounded-md text-foreground-subtle hover:text-foreground hover:bg-muted transition-colors">
+              <X className="h-3.5 w-3.5" />
             </button>
+          </div>
+        </div>
+
+        {/* Severity filter pills */}
+        <div className="flex items-center gap-1 overflow-x-auto -mx-0.5 pb-0.5">
+          {SEVERITY_FILTER_OPTIONS.map((opt) => {
+            const active =
+              (opt.id === "all" && filterSev === "all") ||
+              (Array.isArray(opt.id) && Array.isArray(filterSev) &&
+                opt.id.length === filterSev.length &&
+                opt.id.every((x) => (filterSev as NotificationSeverity[]).includes(x)));
+            return (
+              <button
+                key={opt.label}
+                onClick={() => setFilterSev(opt.id)}
+                className={cn(
+                  "shrink-0 h-6 px-2 rounded-md text-2xs font-bold uppercase tracking-[0.12em] transition-colors",
+                  active
+                    ? "bg-foreground text-background"
+                    : "bg-muted/50 text-foreground-muted hover:bg-muted hover:text-foreground"
+                )}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+          {districts.length > 0 && (
+            <>
+              <span className="mx-1 h-3 w-px bg-border" />
+              {districts.map(([d, count]) => {
+                const active = filterDist === d;
+                return (
+                  <button
+                    key={d}
+                    onClick={() => setFilterDist(active ? "" : d)}
+                    className={cn(
+                      "shrink-0 inline-flex items-center gap-1 h-6 px-2 rounded-md text-2xs font-medium transition-colors",
+                      active
+                        ? "bg-sage-600 text-white"
+                        : "bg-muted/50 text-foreground-muted hover:bg-muted hover:text-foreground"
+                    )}
+                  >
+                    <span className="truncate max-w-[120px]">{d}</span>
+                    <span className="text-2xs opacity-80 font-mono">{count}</span>
+                  </button>
+                );
+              })}
+            </>
           )}
-          <button onClick={onClose} className="p-1 rounded-md text-foreground-subtle hover:text-foreground hover:bg-muted transition-colors">
-            <X className="h-3.5 w-3.5" />
-          </button>
         </div>
       </div>
 
       {/* Notifications list */}
-      <div className="max-h-[420px] overflow-y-auto divide-y divide-border/60">
+      <div className="max-h-[460px] overflow-y-auto">
         <AnimatePresence initial={false}>
-          {notifs.map((n) => {
-            const cfg = NOTIF_CFG[n.kind];
-            const Icon = cfg.icon;
+          {events.map((e) => {
+            const kindCfg = KIND_CFG[e.kind];
+            const sevCfg = SEVERITY_CFG[e.severity];
+            const Icon = kindCfg.icon;
             return (
               <motion.div
-                key={n.id}
-                initial={{ opacity: 1 }}
+                key={e.id}
+                initial={{ opacity: 0, x: 8 }}
+                animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, height: 0, overflow: "hidden" }}
-                transition={{ duration: 0.2 }}
+                transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
                 className={cn(
-                  "flex items-start gap-3 px-5 py-3.5 transition-colors group",
-                  !n.read ? "bg-muted/60" : "hover:bg-muted/30"
+                  "group relative px-4 py-3 border-b border-border/60 transition-colors",
+                  !e.read ? "bg-muted/40" : "hover:bg-muted/20",
                 )}
               >
-                <div className={cn("mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg", cfg.badge)}>
-                  <Icon className={cn("h-3.5 w-3.5", cfg.color)} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-2">
-                    <p className={cn("text-xs font-semibold leading-snug truncate", !n.read ? "text-foreground" : "text-foreground-muted")}>
-                      {n.title}
-                    </p>
-                    {!n.read && <span className="h-1.5 w-1.5 rounded-full bg-peach-500 shrink-0 mt-1" />}
+                <div className="flex items-start gap-3">
+                  <div className={cn(
+                    "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
+                    sevCfg.badge,
+                    e.severity === "critical" && sevCfg.glow,
+                  )}>
+                    <Icon className={cn("h-4 w-4", sevCfg.iconClass)} />
                   </div>
-                  <p className="text-2xs text-foreground-subtle mt-0.5 leading-snug">{n.detail}</p>
-                  <p className="text-2xs text-foreground-subtle/60 font-mono mt-1">
-                    {format(n.ts, "HH:mm · dd MMM")}
-                  </p>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
+                      <span className={cn(
+                        "inline-flex items-center h-4 px-1 rounded text-[9px] font-bold uppercase tracking-[0.14em]",
+                        sevCfg.chip,
+                      )}>
+                        {sevCfg.label}
+                      </span>
+                      <span className="text-2xs font-mono uppercase tracking-[0.10em] text-foreground-subtle">
+                        {kindCfg.label}
+                      </span>
+                      {!e.read && <span className="h-1.5 w-1.5 rounded-full bg-peach-500" />}
+                    </div>
+                    <p className={cn(
+                      "text-xs font-semibold leading-snug truncate",
+                      !e.read ? "text-foreground" : "text-foreground-muted",
+                    )}>
+                      {e.title}
+                    </p>
+                    <p className="text-2xs text-foreground-muted mt-0.5 leading-snug">{e.detail}</p>
+                    <div className="mt-1.5 flex items-center gap-2 text-2xs text-foreground-subtle font-mono">
+                      <span>{formatDistanceToNowStrict(new Date(e.receivedAt))} ago</span>
+                      {e.district && (
+                        <>
+                          <span>·</span>
+                          <span className="truncate max-w-[140px]">{e.district}</span>
+                        </>
+                      )}
+                      {typeof e.threat_score === "number" && (
+                        <>
+                          <span>·</span>
+                          <span>threat {e.threat_score}/100</span>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Actions */}
+                    <div className="mt-2 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {e.detection_id && (
+                        <button
+                          onClick={() => openEvidence(e)}
+                          className="inline-flex items-center gap-1 h-6 px-1.5 rounded-md border border-border bg-surface text-2xs font-semibold text-foreground hover:bg-stone-50 dark:hover:bg-stone-900 transition-colors"
+                        >
+                          <FileText className="h-3 w-3" />
+                          Evidence
+                        </button>
+                      )}
+                      {e.detection_id && (
+                        <button
+                          onClick={() => openEvidence(e)}
+                          className="inline-flex items-center gap-1 h-6 px-1.5 rounded-md border border-border bg-surface text-2xs font-semibold text-foreground hover:bg-stone-50 dark:hover:bg-stone-900 transition-colors"
+                        >
+                          <Fingerprint className="h-3 w-3" />
+                          Dossier
+                        </button>
+                      )}
+                      {!e.read && (
+                        <button
+                          onClick={() => markRead(e.id)}
+                          className="inline-flex items-center h-6 px-1.5 rounded-md text-2xs font-semibold text-foreground-muted hover:text-foreground hover:bg-muted/60 transition-colors"
+                        >
+                          Mark read
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => dismiss(e.id)}
+                    className="opacity-0 group-hover:opacity-100 shrink-0 p-0.5 rounded text-foreground-subtle hover:text-foreground transition-all"
+                    aria-label="Dismiss"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
                 </div>
-                <button
-                  onClick={() => dismiss(n.id)}
-                  className="opacity-0 group-hover:opacity-100 shrink-0 p-0.5 rounded text-foreground-subtle hover:text-foreground transition-all"
-                  aria-label="Dismiss"
-                >
-                  <X className="h-3 w-3" />
-                </button>
               </motion.div>
             );
           })}
         </AnimatePresence>
-        {notifs.length === 0 && (
-          <div className="py-10 text-center">
+
+        {events.length === 0 && (
+          <div className="py-12 text-center px-6">
             <CheckCircle2 className="h-6 w-6 text-sage-500 mx-auto mb-2" />
-            <p className="text-sm text-foreground-muted font-medium">All caught up</p>
+            <p className="text-sm text-foreground-muted font-medium">
+              {total === 0 ? "No events yet" : "No events match the current filters"}
+            </p>
+            <p className="mt-1 text-2xs text-foreground-subtle">
+              {total === 0
+                ? "The intelligence bus is live — events from /demo replays and live cameras will land here."
+                : "Adjust the severity or district filters above."}
+            </p>
           </div>
         )}
       </div>
 
       {/* Footer */}
-      <div className="px-5 py-2.5 border-t border-border bg-muted/30 text-center">
+      <div className="px-4 py-2 border-t border-border bg-muted/30 flex items-center justify-between">
         <span className="text-2xs text-foreground-subtle font-mono uppercase tracking-[0.1em]">
-          Realtime · VAAHAN AI Event Bus
+          Realtime · VAAHAN AI event bus
+        </span>
+        <span className="text-2xs text-foreground-subtle font-mono tabular-nums">
+          {events.length}/{total} shown
         </span>
       </div>
     </motion.div>
@@ -288,8 +480,13 @@ function HelpPanel({ onClose }: { onClose: () => void }) {
 
 /* ── TopBar ─────────────────────────────────────────────────────────── */
 export function TopBar({ title, subtitle, eyebrow, actions }: TopBarProps) {
-  const { status } = useWebSocket("/ws/detections", { autoReconnect: true });
+  // Liveness signal: piggyback on the same WS that the global notification
+  // bus uses — but here we only care about connection status, not payloads.
+  // The actual event ingestion is owned by useNotificationBus, mounted once
+  // at the dashboard layout root. No new socket is opened here.
+  const { status } = useWebSocket("/ws/metrics", { autoReconnect: true });
   const { user, logout } = useAuthStore();
+  const unreadNotifications = useNotificationsStore(selectUnreadCount);
   const [time, setTime] = useState<Date | null>(null);
   const [showNotifs, setShowNotifs] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
@@ -314,7 +511,6 @@ export function TopBar({ title, subtitle, eyebrow, actions }: TopBarProps) {
   }, []);
 
   const isLive = status === "connected";
-  const UNREAD_COUNT = SEED_NOTIFS.filter(n => !n.read).length;
 
   return (
     <header className={cn("sticky top-0 z-30 h-16 shrink-0 glass-warm border-b border-border")}>
@@ -415,8 +611,15 @@ export function TopBar({ title, subtitle, eyebrow, actions }: TopBarProps) {
               className={cn("relative", showNotifs && "bg-muted text-foreground")}
             >
               <Bell className="h-4 w-4" />
-              {UNREAD_COUNT > 0 && (
-                <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-peach-500 ring-2 ring-surface" />
+              {unreadNotifications > 0 && (
+                <motion.span
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ type: "spring", stiffness: 480, damping: 22 }}
+                  className="absolute top-0.5 right-0.5 h-4 min-w-4 px-1 rounded-full bg-peach-500 ring-2 ring-surface inline-flex items-center justify-center text-[9px] font-bold text-white tabular-nums"
+                >
+                  {unreadNotifications > 99 ? "99+" : unreadNotifications}
+                </motion.span>
               )}
             </Button>
             <AnimatePresence>
