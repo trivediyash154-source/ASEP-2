@@ -523,3 +523,72 @@
 }
 @keyframes accordion-down { from { height: 0; } to   { height: var(--radix-accordion-content-height); } }
 @keyframes accordion-up   { from { height: var(--radix-accordion-content-height); } to   { height: 0; } }
+
+/* ─── Landing hero — light-rays drift + orb float ───────────────── */
+@keyframes raysDrift {
+  0%   { transform: translateX(-50%) rotateX(28deg) rotateZ(0deg);   }
+  50%  { transform: translateX(-50%) rotateX(28deg) rotateZ(2.2deg); }
+  100% { transform: translateX(-50%) rotateX(28deg) rotateZ(0deg);   }
+}
+@keyframes raysDriftSlow {
+  0%   { transform: translateX(-50%) rotateX(22deg) rotateZ(-3deg); }
+  50%  { transform: translateX(-50%) rotateX(22deg) rotateZ(-0.6deg); }
+  100% { transform: translateX(-50%) rotateX(22deg) rotateZ(-3deg); }
+}
+@keyframes orbFloat {
+  0%, 100% { transform: translate3d(0, 0, 0)         scale(1);    }
+  50%      { transform: translate3d(-12px, 14px, 0)  scale(1.04); }
+}
+@keyframes orbFloatSlow {
+  0%, 100% { transform: translate3d(0, 0, 0)         scale(1);    }
+  50%      { transform: translate3d(16px, -10px, 0)  scale(1.06); }
+}
+.animate-rays-drift       { animation: raysDrift      18s ease-in-out infinite; }
+.animate-rays-drift-slow  { animation: raysDriftSlow  26s ease-in-out infinite; }
+.animate-orb-float        { animation: orbFloat       14s ease-in-out infinite; }
+.animate-orb-float-slow   { animation: orbFloatSlow   22s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .animate-rays-drift, .animate-rays-drift-slow,
+  .animate-orb-float, .animate-orb-float-slow { animation: none !important; }
+}
+
+/* ─── Login page — ray drift + orb float + persona-card sheen ────── */
+@keyframes loginRaysDrift {
+  0%   { transform: translateX(-50%) rotateX(30deg) rotateZ(0deg);   }
+  50%  { transform: translateX(-50%) rotateX(30deg) rotateZ(2.4deg); }
+  100% { transform: translateX(-50%) rotateX(30deg) rotateZ(0deg);   }
+}
+@keyframes loginRaysDriftSlow {
+  0%   { transform: translateX(-50%) rotateX(24deg) rotateZ(-3deg);  }
+  50%  { transform: translateX(-50%) rotateX(24deg) rotateZ(-0.4deg);}
+  100% { transform: translateX(-50%) rotateX(24deg) rotateZ(-3deg);  }
+}
+@keyframes loginOrbFloat {
+  0%, 100% { transform: translate3d(0, 0, 0)        scale(1);    }
+  50%      { transform: translate3d(-14px, 14px, 0) scale(1.05); }
+}
+@keyframes loginOrbFloatSlow {
+  0%, 100% { transform: translate3d(0, 0, 0)        scale(1);    }
+  50%      { transform: translate3d(16px, -10px, 0) scale(1.06); }
+}
+@keyframes loginShimmer {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(100%);  }
+}
+.login-shimmer { animation: loginShimmer 4.5s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+
+@keyframes loginScanBeam {
+  0%   { transform: translateX(-100%); opacity: 0; }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { transform: translateX(100%); opacity: 0; }
+}
+.login-scan-beam {
+  width: 40%;
+  animation: loginScanBeam 9s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  animation-delay: 2s;
+  filter: blur(0.5px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .login-shimmer, .login-scan-beam { animation: none !important; }
+}

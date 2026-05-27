@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
-from app.middleware.auth_middleware import get_current_active_user
+from app.middleware.auth_middleware import get_current_active_user, require_operator
 from app.services.analytics_service import AnalyticsService
 
 router = APIRouter(prefix="/analytics", tags=["Analytics"])
@@ -31,7 +31,7 @@ async def get_detection_timeline(
 @router.get("/system")
 async def get_system_metrics(
     db: AsyncSession = Depends(get_db),
-    _=Depends(get_current_active_user),
+    _=Depends(require_operator),
 ):
     service = AnalyticsService(db)
     return await service.get_system_metrics()

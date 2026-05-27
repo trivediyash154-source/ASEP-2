@@ -12,8 +12,7 @@ import {
 } from "lucide-react";
 
 import { cn, formatCurrency } from "@/lib/utils";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+import { getApiUrl } from "@/lib/api/client";
 
 export interface ComplianceCheck {
   status: string;
@@ -94,6 +93,7 @@ export function EnforcementStack({ cards }: Props) {
 }
 
 function EnforcementCardView({ card }: { card: EnforcementCard }) {
+  const API_URL = getApiUrl();
   const c = card.compliance;
   const risk = c.risk_score ?? 0;
   const band = c.risk_band ?? "CLEAR";

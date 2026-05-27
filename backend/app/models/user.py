@@ -1,10 +1,10 @@
 """User and authentication models."""
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, Text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSON, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.constants import UserRole
@@ -28,6 +28,7 @@ class User(BaseModel):
     last_login: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     failed_login_attempts: Mapped[int] = mapped_column(default=0)
     locked_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    preferences: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, default=dict, server_default="{}")
 
     refresh_tokens: Mapped[list["RefreshToken"]] = relationship(
         "RefreshToken", back_populates="user", cascade="all, delete-orphan"

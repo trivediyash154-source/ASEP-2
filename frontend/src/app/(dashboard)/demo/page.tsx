@@ -8,6 +8,7 @@ import { TopBar } from "@/components/shared/layout/TopBar";
 import { DemoSurveillanceConsole } from "@/components/cameras/demo/DemoSurveillanceConsole";
 import { ControlledReplayConsole } from "@/components/cameras/demo/controlled/ControlledReplayConsole";
 import { LiveEventRail } from "@/components/shared/event-rail/LiveEventRail";
+import { RoleGuard } from "@/components/shared/RoleGuard";
 import { cn } from "@/lib/utils";
 
 type Mode = "controlled" | "live";
@@ -43,9 +44,10 @@ export default function DemoPage() {
             : "Mobile camera ingest · ANPR pipeline · concurrent compliance · automatic enforcement."
         }
       />
-
-      {/* ── Mode switcher ──────────────────────────────────────────── */}
-      <div className="px-4 sm:px-6 pt-3">
+      <RoleGuard capability="replay:run" label="Live Theatre">
+        <div>
+        {/* ── Mode switcher ──────────────────────────────────────────── */}
+        <div className="px-4 sm:px-6 pt-3">
         <div
           role="tablist"
           aria-label="Demo mode"
@@ -108,7 +110,9 @@ export default function DemoPage() {
         ) : (
           <DemoSurveillanceConsole />
         )}
-      </div>
+        </div>
+        </div>
+      </RoleGuard>
     </>
   );
 }

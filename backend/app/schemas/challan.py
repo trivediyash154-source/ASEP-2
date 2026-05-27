@@ -22,6 +22,8 @@ class ChallanCreate(BaseModel):
 
 
 class ChallanResponse(BaseModel):
+    """Full challan record — includes owner PII. Returned only to roles
+    holding `view:pii` (operator, admin, superadmin)."""
     model_config = {"from_attributes": True}
 
     id: UUID
@@ -42,8 +44,36 @@ class ChallanResponse(BaseModel):
     created_at: datetime
 
 
+class ChallanPublicResponse(BaseModel):
+    """PII-stripped projection for the viewer role. Owner contact fields
+    are intentionally absent (not nulled) — the schema mismatch is itself
+    documentation that this audience is not authorised to see them."""
+    model_config = {"from_attributes": True}
+
+    id: UUID
+    challan_number: str
+    plate_number: str
+    violation_type: str
+    violation_description: Optional[str]
+    fine_amount: float
+    status: ChallanStatus
+    issued_at: datetime
+    due_date: Optional[date]
+    paid_at: Optional[datetime]
+    location: Optional[str]
+    created_at: datetime
+    # PII intentionally absent: owner_name, owner_phone, owner_email, paid_amount
+
+
 class ChallanListResponse(BaseModel):
     items: List[ChallanResponse]
+    total: int
+    page: int
+    page_size: int
+
+
+class ChallanListPublicResponse(BaseModel):
+    items: List[ChallanPublicResponse]
     total: int
     page: int
     page_size: int

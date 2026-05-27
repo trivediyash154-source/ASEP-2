@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Camera, PlugZap, PowerOff, Radio, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
-import { apiClient, getAccessToken } from "@/lib/api/client";
+import { apiClient, getAccessToken, getApiUrl, getWsUrl } from "@/lib/api/client";
 import { cn } from "@/lib/utils";
 import { playChime, unlockAudio } from "@/lib/audio/alertChime";
 import { useEvidenceFlash } from "@/lib/hooks/useEvidenceFlash";
@@ -22,8 +22,6 @@ import { MobileCameraConnect } from "./MobileCameraConnect";
 import { PipelineDiagnosticsPanel } from "./PipelineDiagnosticsPanel";
 
 const DEMO_CAMERA_ID = "demo-primary";
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:8000";
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const MAX_OCR_ACTIVITY = 30;
 
 interface OcrAttempt {
@@ -48,6 +46,8 @@ interface OcrAttempt {
  *   7. Shows diagnostics panel polling /diagnostics endpoint
  */
 export function DemoSurveillanceConsole() {
+  const API_URL = getApiUrl();
+  const WS_URL = getWsUrl();
   const [connected, setConnected] = useState(false);
   const [connectOpen, setConnectOpen] = useState(false);
   const [payload, setPayload] = useState<StreamFramePayload | null>(null);
@@ -63,7 +63,7 @@ export function DemoSurveillanceConsole() {
     if (!connected) return null;
     const t = getAccessToken();
     return `${API_URL}/api/v1/cameras/demo/${DEMO_CAMERA_ID}/mjpeg${t ? `?token=${encodeURIComponent(t)}` : ""}`;
-  }, [connected]);
+  }, [connected, API_URL]);
 
   // ── Connect WS once, reconnect with bounded backoff ───────────
   // Hardening: exponential backoff with jitter, max 10 attempts, abandons

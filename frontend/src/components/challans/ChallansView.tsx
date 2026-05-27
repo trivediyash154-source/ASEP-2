@@ -6,8 +6,11 @@ import { motion } from "framer-motion";
 import {
   CheckCircle, ChevronLeft, ChevronRight, Clock, Download,
   FileText, Filter, IndianRupee, Plus, Search, TrendingUp, XCircle,
+  Lock,
 } from "lucide-react";
 import { challansApi } from "@/lib/api/endpoints";
+import { useAuthStore } from "@/lib/stores/auth.store";
+import { can } from "@/lib/auth/permissions";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -33,6 +36,10 @@ export function ChallansView() {
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState("all");
   const [search, setSearch] = useState("");
+  const role = useAuthStore((s) => s.user?.role);
+  const canIssue = can(role, "challans:issue");
+  const canDownloadPdf = can(role, "challans:download_pdf");
+  const canViewPii = can(role, "evidence:view_pii");
 
   const { data, isLoading } = useQuery({
     queryKey: ["challans", page, statusFilter],
@@ -145,10 +152,19 @@ export function ChallansView() {
                   className="bg-transparent text-xs text-slate-700 placeholder:text-slate-400 outline-none w-40"
                 />
               </div>
-              <button className="btn-primary btn-sm">
-                <Plus className="h-3.5 w-3.5" />
-                Issue Challan
-              </button>
+              {canIssue ? (
+                <button className="btn-primary btn-sm">
+                  <Plus className="h-3.5 w-3.5" />
+                  Issue Challan
+                </button>
+              ) : (
+                <span
+                  className="inline-flex items-center gap-1.5 px-3 h-7 rounded-md border border-stone-200 bg-stone-50 text-2xs font-mono uppercase tracking-wider text-stone-400"
+                  title="Your role cannot issue challans"
+                >
+                  <Lock className="h-3 w-3" /> Read-only
+                </span>
+              )}
             </div>
           </div>
 
@@ -157,7 +173,10 @@ export function ChallansView() {
             <table className="data-table">
               <thead>
                 <tr>
-                  {["Challan #", "Plate", "Violation", "Fine", "Owner", "Status", "Issued", "Due", ""].map((h) => (
+                  {(canViewPii
+                    ? ["Challan #", "Plate", "Violation", "Fine", "Owner", "Status", "Issued", "Due", ""]
+                    : ["Challan #", "Plate", "Violation", "Fine", "Status", "Issued", "Due", ""]
+                  ).map((h) => (
                     <th key={h}>{h}</th>
                   ))}
                 </tr>
@@ -166,7 +185,7 @@ export function ChallansView() {
                 {isLoading
                   ? Array.from({ length: 8 }, (_, i) => (
                       <tr key={i}>
-                        {Array.from({ length: 9 }, (_, j) => (
+                        {Array.from({ length: canViewPii ? 9 : 8 }, (_, j) => (
                           <td key={j}><div className="skeleton h-3 rounded w-full max-w-[100px]" /></td>
                         ))}
                       </tr>
@@ -175,6 +194,8 @@ export function ChallansView() {
                       <ChallanRow
                         key={c.id}
                         challan={c}
+                        canViewPii={canViewPii}
+                        canDownloadPdf={canDownloadPdf}
                         onDownload={() => handleDownloadPdf(c.id, c.challan_number)}
                       />
                     ))
@@ -237,7 +258,17 @@ export function ChallansView() {
   );
 }
 
-function ChallanRow({ challan: c, onDownload }: { challan: Challan; onDownload: () => void }) {
+function ChallanRow({
+  challan: c,
+  canViewPii,
+  canDownloadPdf,
+  onDownload,
+}: {
+  challan: Challan;
+  canViewPii: boolean;
+  canDownloadPdf: boolean;
+  onDownload: () => void;
+}) {
   return (
     <tr>
       <td>
@@ -256,14 +287,16 @@ function ChallanRow({ challan: c, onDownload }: { challan: Challan; onDownload: 
           ₹{c.fine_amount.toLocaleString()}
         </span>
       </td>
-      <td>
-        <div>
-          <p className="text-xs text-slate-700 font-medium">{c.owner_name ?? "—"}</p>
-          {c.owner_phone && (
-            <p className="text-2xs text-slate-400 font-mono">{c.owner_phone}</p>
-          )}
-        </div>
-      </td>
+      {canViewPii && (
+        <td>
+          <div>
+            <p className="text-xs text-slate-700 font-medium">{c.owner_name ?? "—"}</p>
+            {c.owner_phone && (
+              <p className="text-2xs text-slate-400 font-mono">{c.owner_phone}</p>
+            )}
+          </div>
+        </td>
+      )}
       <td>
         <span className={cn("badge", STATUS_BADGE[c.status] ?? "badge-neutral")}>
           {c.status}
@@ -284,13 +317,22 @@ function ChallanRow({ challan: c, onDownload }: { challan: Challan; onDownload: 
         </span>
       </td>
       <td>
-        <button
-          onClick={onDownload}
-          className="btn-icon btn-sm"
-          title="Download PDF"
-        >
-          <Download className="h-3.5 w-3.5" />
-        </button>
+        {canDownloadPdf ? (
+          <button
+            onClick={onDownload}
+            className="btn-icon btn-sm"
+            title="Download PDF"
+          >
+            <Download className="h-3.5 w-3.5" />
+          </button>
+        ) : (
+          <span
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-stone-300"
+            title="Your role cannot download challan PDFs"
+          >
+            <Lock className="h-3 w-3" />
+          </span>
+        )}
       </td>
     </tr>
   );

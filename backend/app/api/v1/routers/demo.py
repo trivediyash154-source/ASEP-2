@@ -18,7 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
-from app.middleware.auth_middleware import get_current_active_user
+from app.middleware.auth_middleware import get_current_active_user, require_operator
 from app.models.user import User
 from app.services import demo_cases as demo_cases_module
 from app.services.demo_replay import run_case
@@ -49,7 +49,7 @@ def _summarize_case(c: demo_cases_module.DemoCase) -> dict:
 
 
 @router.get("/cases")
-async def list_demo_cases(_: User = Depends(get_current_active_user)):
+async def list_demo_cases(_: User = Depends(require_operator)):
     """Curated gallery of replay-ready scenarios."""
     return {"cases": [_summarize_case(c) for c in demo_cases_module.list_cases()]}
 
@@ -57,7 +57,7 @@ async def list_demo_cases(_: User = Depends(get_current_active_user)):
 @router.get("/cases/{case_id}")
 async def get_demo_case(
     case_id: str,
-    _: User = Depends(get_current_active_user),
+    _: User = Depends(require_operator),
 ):
     case = demo_cases_module.get_case(case_id)
     if not case:
@@ -81,7 +81,10 @@ async def get_demo_case(
 async def replay_case(
     case_id: str,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_active_user),
+    # Replay writes real Detection + Challan rows and broadcasts to alert
+    # channels — only field-operator and above may trigger it. Viewers see
+    # the curated case library (read-only) but cannot fire it.
+    _: User = Depends(require_operator),
 ):
     """
     Fires the case end-to-end:

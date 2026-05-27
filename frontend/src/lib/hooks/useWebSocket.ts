@@ -17,10 +17,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getAccessToken } from "@/lib/api/client";
+import { getAccessToken, getWsUrl } from "@/lib/api/client";
 import { log } from "@/lib/diagnostics/logger";
-
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:8000";
 
 export type WSStatus =
   | "connecting"
@@ -110,7 +108,7 @@ export function useWebSocket(
     intentionalCloseRef.current = false;
 
     const token = getAccessToken();
-    const url = `${WS_URL}/api/v1${path}${token ? `?token=${encodeURIComponent(token)}` : ""}`;
+    const url = `${getWsUrl()}/api/v1${path}${token ? `?token=${encodeURIComponent(token)}` : ""}`;
 
     setStatus("connecting");
     log.info("ws", "connect", { path, attempt: attemptRef.current + 1 });

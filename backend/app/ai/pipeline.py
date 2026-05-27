@@ -33,6 +33,8 @@ they are recorded and the next frame is processed.
 """
 
 import asyncio
+import os
+import signal
 import time
 import uuid
 from datetime import datetime, timezone
@@ -128,7 +130,7 @@ class InferencePipeline:
         while self._running:
             t_frame_start = time.perf_counter()
 
-            ret, frame = await loop.run_in_executor(None, self._cap.read)
+            ret, frame = await loop.run_in_executor(None, self._safe_read)
 
             if not ret:
                 self._error_streak += 1
@@ -413,6 +415,12 @@ class InferencePipeline:
     # ── Helpers ───────────────────────────────────────────────────
 
     def _open_capture(self, url: str) -> cv2.VideoCapture:
+        # Tell FFmpeg to skip corrupted packets instead of asserting
+        os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = (
+            "fflags;nobuffer+discardcorrupt"
+            "|flags;low_delay"
+            "|err_detect;ignore_err"
+        )
         cap = cv2.VideoCapture(url, cv2.CAP_FFMPEG)
         cap.set(cv2.CAP_PROP_BUFFERSIZE, settings.STREAM_BUFFER_SIZE)
         cap.set(cv2.CAP_PROP_FPS, settings.MAX_FPS)
@@ -420,6 +428,40 @@ class InferencePipeline:
         if settings.GPU_ENABLED:
             cap.set(cv2.CAP_PROP_HW_ACCELERATION, cv2.VIDEO_ACCELERATION_ANY)
         return cap
+
+    def _safe_read(self) -> tuple:
+        """SIGABRT-protected cv2.VideoCapture.read().
+
+        FFmpeg's demux.c asserts on corrupted packets and calls abort().
+        We try to intercept this as a Python exception so the pipeline
+        can reconnect instead of crashing the entire uvicorn process.
+        """
+        if self._cap is None or not self._cap.isOpened():
+            return False, None
+        original_handler = None
+        try:
+            try:
+                original_handler = signal.getsignal(signal.SIGABRT)
+                signal.signal(signal.SIGABRT, _sigabrt_handler_pipeline)
+            except (ValueError, OSError):
+                original_handler = None
+            return self._cap.read()
+        except _PipelineAbortError:
+            logger.error(
+                "pipeline_ffmpeg_abort_caught",
+                camera_id=self.camera_id,
+                hint="FFmpeg assertion failure intercepted — reconnecting",
+            )
+            return False, None
+        except Exception as exc:
+            logger.error("pipeline_read_exception", camera_id=self.camera_id, error=str(exc))
+            return False, None
+        finally:
+            if original_handler is not None:
+                try:
+                    signal.signal(signal.SIGABRT, original_handler)
+                except (ValueError, OSError):
+                    pass
 
     async def _reconnect(self) -> None:
         """Dispose existing capture and re-open after a cooldown."""
@@ -617,3 +659,15 @@ class PipelineManager:
 
 
 pipeline_manager = PipelineManager()
+
+
+# ── SIGABRT defence (shared with stream_manager.py) ───────────────
+
+class _PipelineAbortError(Exception):
+    """Raised when SIGABRT is caught from an FFmpeg assertion failure."""
+
+
+def _sigabrt_handler_pipeline(signum, frame):
+    raise _PipelineAbortError(
+        f"FFmpeg sent SIGABRT (signal {signum}) — demux assertion failure"
+    )

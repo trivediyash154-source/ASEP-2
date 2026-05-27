@@ -29,6 +29,7 @@ from app.core.logging import get_logger
 from app.db.session import AsyncSessionFactory
 from app.models.challan import Challan
 from app.models.vehicle import Owner, Vehicle
+from app.services.synthetic_dossier import generate_synthetic_dossier
 
 logger = get_logger(__name__)
 
@@ -80,6 +81,10 @@ class ComplianceReport:
     vehicle_year: Optional[int] = None
     vehicle_category: Optional[str] = None
     owner: OwnerSnapshot = field(default_factory=OwnerSnapshot)
+    # True when the dossier was built by the synthetic engine (no DB row).
+    # Frontend can render a small "Synthetic intel" pill, analytics can
+    # split real-registry signals from generated ones.
+    is_synthetic: bool = False
 
     def as_dict(self) -> dict:
         return {
@@ -102,6 +107,7 @@ class ComplianceReport:
                 "category": self.vehicle_category,
             },
             "owner": self.owner.as_dict(),
+            "is_synthetic": self.is_synthetic,
         }
 
 
@@ -170,20 +176,12 @@ def _compose(
     today = datetime.utcnow().date()
 
     if vehicle is None:
-        # Plate not in registry — high risk by default
-        unknown = CheckResult(status="UNKNOWN", detail="Plate not in registry")
-        report = ComplianceReport(
-            plate=plate,
-            vehicle_known=False,
-            risk_score=72,
-            risk_band="HIGH",
-            enforcement_action="VERIFY_OWNER",
-            registration=CheckResult(status="UNKNOWN", detail="No registration record"),
-            insurance=unknown,
-            puc=unknown,
-            blacklist=CheckResult(status="UNKNOWN", detail="Cannot verify watchlist"),
-        )
-        return report
+        # Plate not in demo registry → fall through to the synthetic
+        # dossier so the operator console always shows a believable
+        # intelligence card instead of a generic "UNKNOWN" stub. The
+        # report is flagged `is_synthetic=True` so analytics and the
+        # frontend can distinguish it from real-registry hits.
+        return _compose_from_synthetic(plate, open_violations, outstanding_fine)
 
     registration = _expiry_check("Registration", vehicle.registration_expiry, today)
     insurance = _expiry_check("Insurance", vehicle.insurance_expiry, today)
@@ -265,6 +263,131 @@ def _compose(
             city=owner.city if owner else None,
             state=owner.state if owner else None,
         ),
+    )
+
+
+# ── Synthetic-dossier path ─────────────────────────────────────────
+
+
+def _synthetic_check(label: str, status: str, expiry: date) -> CheckResult:
+    """Build a CheckResult from synthetic status + expiry date, with the
+    same human-readable detail string the real path emits."""
+    today = datetime.utcnow().date()
+    days = (expiry - today).days
+    if status == "EXPIRED":
+        return CheckResult(
+            status="EXPIRED",
+            expiry=expiry,
+            detail=f"{label} expired {abs(days)} day(s) ago",
+        )
+    if status == "EXPIRING_SOON":
+        return CheckResult(
+            status="EXPIRING_SOON",
+            expiry=expiry,
+            detail=f"{label} expires in {days} day(s)",
+        )
+    return CheckResult(
+        status="VALID",
+        expiry=expiry,
+        detail=f"{label} valid for {days} more day(s)",
+    )
+
+
+def _compose_from_synthetic(
+    plate: str,
+    open_violations: int,
+    outstanding_fine: float,
+) -> ComplianceReport:
+    """Build a ComplianceReport entirely from the synthetic dossier.
+
+    Risk scoring uses the exact same weights as the real path so the
+    operator console can't tell a synthetic dossier from a real one by
+    looking at the score. The single distinguishing field is
+    `is_synthetic=True` on the report itself.
+    """
+    dossier = generate_synthetic_dossier(plate)
+
+    registration = _synthetic_check("Registration", dossier.registration_status, dossier.registration_expiry)
+    insurance    = _synthetic_check("Insurance",    dossier.insurance_status,    dossier.insurance_expiry)
+    puc          = _synthetic_check("PUC",          dossier.puc_status,          dossier.puc_expiry)
+
+    if dossier.blacklist_flagged:
+        blacklist = CheckResult(
+            status="FLAGGED",
+            detail=dossier.blacklist_reason or "Vehicle on enforcement watchlist",
+        )
+    elif dossier.offense_history_count > 0:
+        blacklist = CheckResult(
+            status="OUTSTANDING",
+            detail=f"{dossier.offense_history_count} prior violation(s) on file",
+        )
+    else:
+        blacklist = CheckResult(status="CLEAR", detail="No active watchlist record")
+
+    score = 0
+    if dossier.blacklist_flagged:
+        score += 55
+    if registration.status == "EXPIRED":
+        score += 25
+    elif registration.status == "EXPIRING_SOON":
+        score += 6
+    if insurance.status == "EXPIRED":
+        score += 20
+    elif insurance.status == "EXPIRING_SOON":
+        score += 4
+    if puc.status == "EXPIRED":
+        score += 12
+    elif puc.status == "EXPIRING_SOON":
+        score += 3
+    if dossier.offense_history_count >= 5:
+        score += 18
+    elif dossier.offense_history_count >= 1:
+        score += 8
+    score = min(score, 100)
+
+    band = (
+        "CRITICAL" if score >= 80 else
+        "HIGH"     if score >= 55 else
+        "MODERATE" if score >= 30 else
+        "LOW"      if score >= 10 else
+        "CLEAR"
+    )
+    action = (
+        "IMPOUND_RECOMMENDED" if score >= 85 else
+        "CITATE_AND_FLAG"     if score >= 55 else
+        "ISSUE_CHALLAN"       if score >= 30 else
+        "ADVISE_ONLY"         if score >= 10 else
+        "PASS"
+    )
+
+    return ComplianceReport(
+        plate=plate,
+        # vehicle_known stays False — analytics relies on this flag to
+        # distinguish real-registry hits from synthetic dossiers when
+        # computing population health metrics.
+        vehicle_known=False,
+        risk_score=score,
+        risk_band=band,
+        enforcement_action=action,
+        registration=registration,
+        insurance=insurance,
+        puc=puc,
+        blacklist=blacklist,
+        open_violations=open_violations,
+        outstanding_fine_total=outstanding_fine,
+        vehicle_make=dossier.vehicle_make,
+        vehicle_model=dossier.vehicle_model,
+        vehicle_color=dossier.vehicle_color,
+        vehicle_year=dossier.vehicle_year,
+        vehicle_category=dossier.vehicle_category,
+        owner=OwnerSnapshot(
+            name=dossier.owner_name,
+            phone=dossier.owner_phone,
+            email=dossier.owner_email,
+            city=dossier.owner_city,
+            state=dossier.owner_state,
+        ),
+        is_synthetic=True,
     )
 
 

@@ -75,6 +75,8 @@ FINE_AMOUNTS = {
     "expired_registration": 2000,
     "expired_insurance": 1500,
     "no_pollution_certificate": 1000,
+    "expired_pollution_certificate": 1000,
+    "unregistered_vehicle": 5000,
     "second_offense": 5000,
 }
 
@@ -112,5 +114,29 @@ MAX_PAGE_SIZE = 100
 ALLOWED_VIDEO_EXTENSIONS = {".mp4", ".avi", ".mkv", ".mov", ".webm"}
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 
-# Indian plate regex pattern
-PLATE_PATTERN = r"^[A-Z]{2}[0-9]{1,2}[A-Z]{1,2}[0-9]{4}$"
+# Indian plate regex pattern. Anchored, uppercase-only. Normalization
+# pipeline (see ocr._normalize_plate) is responsible for upper-casing and
+# stripping separators before this regex runs.
+#
+# Accepted variants (in order):
+#   1) Standard / Delhi alphanumeric / VIP-short
+#        2 state letters · 1–2 district digits · 1–3 series letters · 1–4 number digits
+#        e.g.  MH02AB1234   DL3CAB1234   MH02A7
+#   2) Bharat (BH) series
+#        2 year digits · "BH" · 4 number digits · 2 series letters
+#        e.g.  22BH1234AA
+#   3) Temporary / transit (conservative; explicit "TMP" infix prevents
+#      collisions with the standard variant)
+#        2 state letters · "TMP" · 1–2 district digits · 0–2 series letters · 1–4 number digits
+#        e.g.  MHTMP12AB1234   DLTMP1A99
+#
+# Uses non-capturing groups (?:...) — we never need the alternation index.
+PLATE_PATTERN = (
+    r"^(?:"
+    r"[A-Z]{2}[0-9]{1,2}[A-Z]{0,3}[0-9]{1,4}"          # Standard / Delhi alpha / VIP / No-series
+    r"|[0-9]{2}BH[0-9]{4}[A-Z]{2}"                       # Bharat series
+    r"|[A-Z]{2}TMP[0-9]{1,2}[A-Z]{0,2}[0-9]{1,4}"        # Temporary / transit (old style)
+    r"|T[0-9]{4}[A-Z]{2}[0-9]{4}[A-Z]{1,2}"              # MoRTH Temporary / transit (new style)
+    r")$"
+)
+

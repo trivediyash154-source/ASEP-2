@@ -67,7 +67,7 @@ async def toggle_user_active(
     user_id: str,
     body: dict,
     db: AsyncSession = Depends(get_db),
-    actor: User = Depends(_require_admin),
+    actor: User = Depends(_require_superadmin),
 ):
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()

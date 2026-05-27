@@ -31,8 +31,39 @@ class DetectionResponse(BaseModel):
     created_at: datetime
 
 
+class DetectionPublicResponse(BaseModel):
+    """PII-stripped projection for the viewer role — plate number redacted."""
+    model_config = {"from_attributes": True}
+
+    id: UUID
+    camera_id: Optional[UUID]
+    vehicle_id: Optional[UUID]
+    detected_plate: Optional[str] = None
+    ocr_confidence: Optional[float]
+    vehicle_confidence: Optional[float]
+    plate_confidence: Optional[float]
+    vehicle_category: Optional[str]
+    bounding_box: Optional[Dict[str, Any]]
+    plate_bounding_box: Optional[Dict[str, Any]] = None
+    timestamp: datetime
+    status: DetectionStatus
+    is_violation: bool
+    violation_type: Optional[str]
+    processing_time_ms: Optional[int]
+    frame_path: Optional[str]
+    plate_crop_path: Optional[str] = None
+    created_at: datetime
+
+
 class DetectionListResponse(BaseModel):
     items: List[DetectionResponse]
+    total: int
+    page: int
+    page_size: int
+
+
+class DetectionListPublicResponse(BaseModel):
+    items: List[DetectionPublicResponse]
     total: int
     page: int
     page_size: int

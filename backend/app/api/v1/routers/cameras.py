@@ -256,7 +256,7 @@ async def demo_probe(body: DemoProbeRequest, _=Depends(get_current_active_user))
 async def demo_connect(
     camera_id: str,
     body: DemoConnectRequest,
-    _=Depends(get_current_active_user),
+    _=Depends(require_operator),
 ):
     """Open a live stream and start the ANPR pipeline for this demo camera.
 
@@ -277,7 +277,7 @@ async def demo_connect(
 
 
 @router.post("/demo/{camera_id}/disconnect", status_code=status.HTTP_202_ACCEPTED)
-async def demo_disconnect(camera_id: str, _=Depends(get_current_active_user)):
+async def demo_disconnect(camera_id: str, _=Depends(require_operator)):
     stopped = await demo_pipelines.stop(camera_id)
     return {"stopped": stopped, "camera_id": camera_id}
 

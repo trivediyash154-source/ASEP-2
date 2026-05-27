@@ -3,17 +3,59 @@
  */
 import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const API_PREFIX = "/api/v1";
 
+export function getApiUrl(): string {
+  if (typeof window !== "undefined") {
+    const host = window.location.host;
+    const hostname = window.location.hostname;
+    
+    // Check if running behind a remote tunnel (e.g. IDX, Gitpod, Codespaces)
+    if (hostname.includes("3000") || host.includes("3000")) {
+      const proto = window.location.protocol;
+      const newHost = host.replace("3000", "8000");
+      return `${proto}//${newHost}`;
+    }
+
+    if (window.location.port === "" || window.location.port === "80" || window.location.port === "443") {
+      return `${window.location.protocol}//${window.location.host}`;
+    }
+    return `${window.location.protocol}//${window.location.hostname}:8000`;
+  }
+  return process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+}
+
+export function getWsUrl(): string {
+  if (typeof window !== "undefined") {
+    const host = window.location.host;
+    const hostname = window.location.hostname;
+    const wsProto = window.location.protocol === "https:" ? "wss:" : "ws:";
+
+    if (hostname.includes("3000") || host.includes("3000")) {
+      const newHost = host.replace("3000", "8000");
+      return `${wsProto}//${newHost}`;
+    }
+
+    if (window.location.port === "" || window.location.port === "80" || window.location.port === "443") {
+      return `${wsProto}//${window.location.host}`;
+    }
+    return `${wsProto}//${window.location.hostname}:8000`;
+  }
+  return process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:8000";
+}
+
 export const apiClient = axios.create({
-  baseURL: `${API_URL}${API_PREFIX}`,
+  baseURL: `${getApiUrl()}${API_PREFIX}`,
   timeout: 30_000,
   headers: {
     "Content-Type": "application/json",
     Accept: "application/json",
   },
 });
+
+if (typeof window !== "undefined") {
+  apiClient.defaults.baseURL = `${getApiUrl()}${API_PREFIX}`;
+}
 
 // ── Request interceptor — inject access token ──────────────────
 apiClient.interceptors.request.use(
@@ -30,6 +72,42 @@ apiClient.interceptors.request.use(
 // ── Response interceptor — handle 401 and refresh token ─────────
 let isRefreshing = false;
 let refreshSubscribers: Array<(token: string) => void> = [];
+
+/**
+ * Redirect-to-login coordination.
+ *
+ * Without this we'd hit a classic page-reload loop: every 401 → window.location
+ * → fresh page → fresh batch of API calls → fresh 401s → another reload, at
+ * 30+ navigations/sec. This module-level flag de-duplicates concurrent 401s
+ * AND silently swallows them when a demo session is active (demo sessions
+ * are local-only — the backend will always 401 if there's no real JWT, and
+ * that's expected, not a fatal condition).
+ */
+let isRedirectingToLogin = false;
+
+function hasDemoSession(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return !!window.localStorage.getItem("vaahan.demo-session");
+  } catch {
+    return false;
+  }
+}
+
+function redirectToLoginOnce(): void {
+  if (typeof window === "undefined" || isRedirectingToLogin) return;
+  // Demo session is the local fallback for unauthenticated backends —
+  // do NOT kick the operator out of the dashboard just because /auth/me
+  // 401'd. The dashboard layout already handles that case gracefully.
+  if (hasDemoSession()) return;
+  isRedirectingToLogin = true;
+  // Already on /login? Don't navigate — would just clobber form state.
+  if (window.location.pathname === "/login") {
+    isRedirectingToLogin = false;
+    return;
+  }
+  window.location.href = "/login";
+}
 
 apiClient.interceptors.response.use(
   (response) => response,
@@ -52,12 +130,12 @@ apiClient.interceptors.response.use(
       const refreshToken = getRefreshToken();
       if (!refreshToken) {
         clearTokens();
-        window.location.href = "/login";
+        redirectToLoginOnce();
         return Promise.reject(error);
       }
 
       try {
-        const { data } = await axios.post(`${API_URL}${API_PREFIX}/auth/refresh`, {
+        const { data } = await axios.post(`${getApiUrl()}${API_PREFIX}/auth/refresh`, {
           refresh_token: refreshToken,
         });
         setTokens(data.access_token, data.refresh_token);
@@ -67,7 +145,7 @@ apiClient.interceptors.response.use(
         return apiClient(original);
       } catch {
         clearTokens();
-        window.location.href = "/login";
+        redirectToLoginOnce();
         return Promise.reject(error);
       } finally {
         isRefreshing = false;

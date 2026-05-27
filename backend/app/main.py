@@ -118,14 +118,26 @@ def create_application() -> FastAPI:
 
     # ── Middleware stack (order matters — outermost executes first) ───────────
     app.add_middleware(GZipMiddleware, minimum_size=1000)
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=settings.cors_origins,
-        allow_credentials=True,
-        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["*"],
-        expose_headers=["X-RateLimit-Limit", "X-RateLimit-Remaining"],
-    )
+    
+    # CORS setup — allow any origin in development to support arbitrary LAN IPs and tunnels
+    if settings.APP_ENV.lower() != "production":
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origin_regex=r"https?://.*",
+            allow_credentials=True,
+            allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+            allow_headers=["*"],
+            expose_headers=["X-RateLimit-Limit", "X-RateLimit-Remaining"],
+        )
+    else:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=settings.cors_origins,
+            allow_credentials=True,
+            allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+            allow_headers=["*"],
+            expose_headers=["X-RateLimit-Limit", "X-RateLimit-Remaining"],
+        )
 
     # ── Prometheus metrics ────────────────────────────────────────────────────
     Instrumentator(

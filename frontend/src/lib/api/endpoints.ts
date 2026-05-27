@@ -1,7 +1,7 @@
 /**
  * All API endpoint functions — typed, centralized, no magic strings elsewhere.
  */
-import { apiClient } from "./client";
+import { apiClient, getApiUrl } from "./client";
 import type {
   AuthTokens,
   Camera,
@@ -22,6 +22,18 @@ export const authApi = {
     apiClient.post<AuthTokens>("/auth/refresh", { refresh_token }),
   me: (opts?: { signal?: AbortSignal }) =>
     apiClient.get<User>("/auth/me", { signal: opts?.signal, timeout: 6000 }),
+  updateProfile: (data: { full_name?: string; phone?: string; avatar_url?: string }) =>
+    apiClient.put<User>("/auth/me", data),
+  getPreferences: () =>
+    apiClient.get<{
+      theme: string;
+      notifications_enabled: boolean;
+      default_camera: string | null;
+      timezone: string;
+      compact_sidebar: boolean;
+    }>("/auth/me/preferences"),
+  updatePreferences: (data: Record<string, unknown>) =>
+    apiClient.put("/auth/me/preferences", data),
   register: (data: {
     email: string;
     username: string;
@@ -200,8 +212,6 @@ export const demoApi = {
 };
 
 // ── Health (root endpoint, no auth needed) ───────────────────────
-const _API_URL_RAW = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
 export interface HealthResponse {
   status: "healthy" | "degraded";
   version: string;
@@ -213,5 +223,5 @@ export interface HealthResponse {
 
 export const healthApi = {
   check: (): Promise<HealthResponse> =>
-    fetch(`${_API_URL_RAW}/health`).then((r) => r.json() as Promise<HealthResponse>),
+    fetch(`${getApiUrl()}/health`).then((r) => r.json() as Promise<HealthResponse>),
 };

@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
-from app.middleware.auth_middleware import get_current_active_user
+from app.middleware.auth_middleware import get_current_active_user, require_operator
 from app.models.user import User
 from app.models.system_setting import SystemSetting
 from app.core.constants import UserRole
@@ -22,7 +22,7 @@ def _require_admin(current_user: User = Depends(get_current_active_user)) -> Use
 @router.get("")
 async def get_settings(
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_active_user),
+    _: User = Depends(require_operator),
 ) -> Dict[str, Any]:
     result = await db.execute(select(SystemSetting).order_by(SystemSetting.category, SystemSetting.key))
     rows = result.scalars().all()

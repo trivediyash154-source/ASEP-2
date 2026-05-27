@@ -35,9 +35,9 @@ CONFIDENCE_UPGRADE_THRESHOLD = 0.65
 # Indian state codes — used to validate the first two characters
 VALID_STATE_CODES = {
     "AP", "AR", "AS", "BR", "CG", "GA", "GJ", "HR", "HP", "JH",
-    "KA", "KL", "MP", "MH", "MN", "ML", "MZ", "NL", "OD", "PB",
-    "RJ", "SK", "TN", "TG", "TR", "UP", "UK", "WB", "AN", "CH",
-    "DH", "DD", "DL", "JK", "LA", "LD", "PY",
+    "KA", "KL", "MP", "MH", "MN", "ML", "MZ", "NL", "OD", "OR", "PB",
+    "RJ", "SK", "TN", "TG", "TS", "TR", "UP", "UK", "UA", "WB", "AN", "CH",
+    "DN", "DD", "DL", "JK", "LA", "LD", "PY",
 }
 PLATE_REGEX = re.compile(PLATE_PATTERN)
 
@@ -54,7 +54,14 @@ class OCRCandidate:
     def __post_init__(self) -> None:
         self.normalized = _normalize_plate(self.text)
         self.is_valid_format = bool(PLATE_REGEX.match(self.normalized))
-        self.has_valid_state_code = self.normalized[:2] in VALID_STATE_CODES
+        # BH series starts with two year digits, not a state code — bypass the
+        # state-code allow-list when the plate matches the BH layout.
+        if self.is_valid_format and _is_bh_series(self.normalized):
+            self.has_valid_state_code = True
+        elif self.is_valid_format and _is_morth_temp_series(self.normalized):
+            self.has_valid_state_code = self.normalized[5:7] in VALID_STATE_CODES
+        else:
+            self.has_valid_state_code = self.normalized[:2] in VALID_STATE_CODES
 
     @property
     def quality_score(self) -> float:
@@ -323,18 +330,45 @@ CHAR_FIXES_LETTER_POSITIONS = {"0": "O", "1": "I", "5": "S", "8": "B"}
 CHAR_FIXES_DIGIT_POSITIONS = {"O": "0", "I": "1", "S": "5", "B": "8", "Z": "2", "G": "6"}
 
 
+def _is_bh_series(candidate: str) -> bool:
+    """
+    True if the (already normalized, uppercase) candidate is a Bharat-series
+    plate: ``YYBH####XX`` — 2 year digits, literal BH, 4 number digits, 2 series
+    letters. Used both to skip state-code validation and to drive position-aware
+    OCR corrections (year digits must not be turned into letters).
+    """
+    if len(candidate) != 10:
+        return False
+    return (
+        candidate[0:2].isdigit()
+        and candidate[2:4] == "BH"
+        and candidate[4:8].isdigit()
+        and candidate[8:10].isalpha()
+    )
+
+
+def _is_morth_temp_series(candidate: str) -> bool:
+    """
+    True if the candidate matches the MoRTH temporary registration format:
+    T[0-9]{4}[A-Z]{2}[0-9]{4}[A-Z]{1,2}
+    """
+    if not (12 <= len(candidate) <= 13):
+        return False
+    return (
+        candidate[0] == "T"
+        and candidate[1:5].isdigit()
+        and candidate[5:7].isalpha()
+        and candidate[7:11].isdigit()
+        and candidate[11:].isalpha()
+    )
+
+
 def _normalize_plate(text: str) -> str:
     """
-    Normalize OCR output to standard Indian plate format: SSDDLLDDDD
-      SS = 2-letter state code
-      DD = 1-2 digit district code
-      LL = 1-2 letter series
-      DDDD = 4-digit number
-
-    Steps:
-      1. Strip whitespace, hyphens, dots, spaces
-      2. Uppercase
-      3. Apply position-aware character corrections
+    Normalize OCR output to standard Indian plate format (SSDDLLDDDD / YYBH####XX / TMMYYSS####XX).
+      Standard: SS = state, DD = district, LL = series, DDDD = number
+      BH Series: YY = year, BH = Bharat, #### = number, XX = series
+      MoRTH Temp: T = Temporary, MMYY = month/year, SS = state, #### = number, XX = series
     """
     # Remove common separators inserted by OCR
     text = re.sub(r"[\s\-_./\\|]", "", text.upper().strip())
@@ -344,21 +378,119 @@ def _normalize_plate(text: str) -> str:
 
     chars = list(text)
 
-    # Positions 0-1: state code → must be letters
-    for i in range(min(2, len(chars))):
-        chars[i] = CHAR_FIXES_LETTER_POSITIONS.get(chars[i], chars[i])
+    # Detect MoRTH temporary series: e.g., T0526MH1234AB
+    is_morth_temp = False
+    if len(chars) >= 12 and chars[0] in ("T", "7"):
+        digit_score = sum(1 for c in chars[1:5] if c.isdigit() or c in CHAR_FIXES_DIGIT_POSITIONS)
+        digit_score += sum(1 for c in chars[7:11] if c.isdigit() or c in CHAR_FIXES_DIGIT_POSITIONS)
+        letter_score = sum(1 for c in chars[5:7] if c.isalpha() or c in CHAR_FIXES_LETTER_POSITIONS)
+        letter_score += sum(1 for c in chars[11:] if c.isalpha() or c in CHAR_FIXES_LETTER_POSITIONS)
+        if digit_score + letter_score >= 9:
+            is_morth_temp = True
 
-    # Positions 2-3: district code → must be digits
-    for i in range(2, min(4, len(chars))):
-        chars[i] = CHAR_FIXES_DIGIT_POSITIONS.get(chars[i], chars[i])
+    # Detect BH series: e.g. YYBH1234XX (length 10)
+    # Check if characters at index 2,3 are BH (allowing common OCR confusion like 8, B, H)
+    is_bh = False
+    if not is_morth_temp and len(chars) >= 8:
+        c2 = chars[2]
+        c3 = chars[3]
+        if c2 in ("B", "8") and c3 in ("H", "A", "4"):
+            is_bh = True
 
-    # Positions 4-5: series letters → must be letters
-    for i in range(4, min(6, len(chars))):
-        chars[i] = CHAR_FIXES_LETTER_POSITIONS.get(chars[i], chars[i])
+    if is_morth_temp:
+        chars[0] = "T"
+        for i in range(1, 5):
+            chars[i] = CHAR_FIXES_DIGIT_POSITIONS.get(chars[i], chars[i])
+        for i in range(5, 7):
+            chars[i] = CHAR_FIXES_LETTER_POSITIONS.get(chars[i], chars[i])
+        for i in range(7, 11):
+            chars[i] = CHAR_FIXES_DIGIT_POSITIONS.get(chars[i], chars[i])
+        for i in range(11, len(chars)):
+            chars[i] = CHAR_FIXES_LETTER_POSITIONS.get(chars[i], chars[i])
+    elif is_bh:
+        # Positions 0-1: year → must be digits
+        for i in range(min(2, len(chars))):
+            chars[i] = CHAR_FIXES_DIGIT_POSITIONS.get(chars[i], chars[i])
+        # Positions 2-3: "BH"
+        if len(chars) > 2:
+            chars[2] = "B"
+        if len(chars) > 3:
+            chars[3] = "H"
+        # Positions 4-7: registration number → must be digits
+        for i in range(4, min(8, len(chars))):
+            chars[i] = CHAR_FIXES_DIGIT_POSITIONS.get(chars[i], chars[i])
+        # Positions 8+: series letters → must be letters
+        for i in range(8, len(chars)):
+            chars[i] = CHAR_FIXES_LETTER_POSITIONS.get(chars[i], chars[i])
+    else:
+        # Standard plate normalization
+        # Chars 0-1: state code -> must be letters
+        for i in range(min(2, len(chars))):
+            chars[i] = CHAR_FIXES_LETTER_POSITIONS.get(chars[i], chars[i])
 
-    # Positions 6-9: registration number → must be digits
-    for i in range(6, min(10, len(chars))):
-        chars[i] = CHAR_FIXES_DIGIT_POSITIONS.get(chars[i], chars[i])
+        # Char 2: must be digit
+        if len(chars) > 2:
+            chars[2] = CHAR_FIXES_DIGIT_POSITIONS.get(chars[2], chars[2])
+
+        if len(chars) > 3:
+            # Char 3: determine if it's part of district code (digit) or series (letter)
+            # If it is a digit or commonly confused with a digit, make it digit.
+            c3 = chars[3]
+            if c3.isdigit() or c3 in CHAR_FIXES_DIGIT_POSITIONS:
+                chars[3] = CHAR_FIXES_DIGIT_POSITIONS.get(c3, c3)
+                series_start_idx = 4
+            else:
+                series_start_idx = 3
+
+            # Trailing registration number is at most 4 digits, series letters at most 3 letters.
+            # Determine valid range for partition point `p` between series letters and number digits
+            min_p = max(series_start_idx, len(chars) - 4)
+            max_p = min(series_start_idx + 3, len(chars) - 1)
+
+            if min_p <= max_p:
+                best_p = min_p
+                best_score = -9999
+
+                strongly_letters = set("ACDEFHJKLMNOPQRTUVWXY")
+                strongly_digits = set("0123456789")
+
+                for p in range(min_p, max_p + 1):
+                    score = 0
+                    # Left part (letters)
+                    for idx in range(series_start_idx, p):
+                        char = chars[idx]
+                        if char in strongly_letters:
+                            score += 2
+                        elif char in CHAR_FIXES_LETTER_POSITIONS:
+                            score += 1
+                        elif char in strongly_digits:
+                            score -= 10
+
+                    # Right part (digits)
+                    for idx in range(p, len(chars)):
+                        char = chars[idx]
+                        if char in strongly_digits:
+                            score += 2
+                        elif char in CHAR_FIXES_DIGIT_POSITIONS:
+                            score += 1
+                        elif char in strongly_letters:
+                            score -= 10
+
+                    if score > best_score:
+                        best_score = score
+                        best_p = p
+
+                # Normalise series letters: series_start_idx to best_p - 1
+                for i in range(series_start_idx, best_p):
+                    chars[i] = CHAR_FIXES_LETTER_POSITIONS.get(chars[i], chars[i])
+
+                # Normalise trailing digits: best_p to end
+                for i in range(best_p, len(chars)):
+                    chars[i] = CHAR_FIXES_DIGIT_POSITIONS.get(chars[i], chars[i])
+            else:
+                # Fallback: normalize everything else to digits if the length is too short
+                for i in range(series_start_idx, len(chars)):
+                    chars[i] = CHAR_FIXES_DIGIT_POSITIONS.get(chars[i], chars[i])
 
     return "".join(chars)
 

@@ -61,7 +61,7 @@ from app.ai.detector import vehicle_detector, BoundingBox, DetectionResult
 from app.ai.evidence_store import save_frame_async, save_plate_crop_async
 from app.ai.ocr import plate_ocr
 from app.ai.preprocessor import preprocess_plate_crop
-from app.core.constants import ChallanStatus, DetectionStatus
+from app.core.constants import ChallanStatus, DetectionStatus, FINE_AMOUNTS
 from app.core.logging import get_logger
 from app.db.session import AsyncSessionFactory
 from app.models.camera import Camera
@@ -239,10 +239,19 @@ class DemoPipelineRegistry:
         async with self._lock:
             await self._stop_unlocked(camera_id)
 
-            src = stream_registry.register(camera_id, source_url, label=camera_id)
+            # stream_registry.register() is synchronous and may block up to
+            # 4 seconds inside `thread.join()` when tearing down a previous
+            # reader thread that's hung in `cv2.VideoCapture.read()` (which
+            # is the common state when an IP webcam goes silent). Running it
+            # in a worker thread keeps the asyncio event loop free — without
+            # this offload the whole API freezes during reconnects, which
+            # the operator perceives as "the website went offline."
+            src = await asyncio.to_thread(
+                stream_registry.register, camera_id, source_url, camera_id
+            )
             opened = await asyncio.to_thread(src.wait_until_opened, 9.0)
             if not opened:
-                stream_registry.unregister(camera_id)
+                await asyncio.to_thread(stream_registry.unregister, camera_id)
                 logger.warning("demo_stream_open_timeout", camera_id=camera_id, source=str(source_url))
                 return {
                     "status": "failed",
@@ -289,7 +298,10 @@ class DemoPipelineRegistry:
             await h.task
         except (asyncio.CancelledError, Exception):
             pass
-        stream_registry.unregister(camera_id)
+        # Same reason as in start(): unregister joins the reader thread for
+        # up to 4 s when cv2.read() is hung. Offload to a worker thread so
+        # the FastAPI loop stays alive during teardown.
+        await asyncio.to_thread(stream_registry.unregister, camera_id)
         logger.info("demo_pipeline_stopped", camera_id=camera_id)
         return True
 
@@ -881,6 +893,9 @@ async def _persist_detection(
                 }
 
         violation_label = _violation_label(compliance.as_dict())
+        if not compliance.vehicle_known:
+            violation_label = "Unregistered Vehicle"
+
         det = Detection(
             camera_id=cam_uuid,
             vehicle_id=veh_id,
@@ -902,25 +917,78 @@ async def _persist_detection(
         await session.flush()
         await session.refresh(det)
 
-        if compliance.risk_score >= 55 and veh_id is not None:
+        if compliance.risk_score >= 55:
+            # Issue a challan. Three paths:
+            #   1. Known DB vehicle  → use real owner record.
+            #   2. Synthetic dossier → use the AI-generated owner (still
+            #      believable, tagged as synthetic via violation_description).
+            #   3. Plate failed to resolve  → sentinel name + log warning.
+            is_synthetic = getattr(compliance, "is_synthetic", False)
+            is_unregistered = not compliance.vehicle_known or veh_id is None
             fine = ENFORCEMENT_FINE_MAP.get(compliance.enforcement_action, 2000)
+
+            if is_unregistered and is_synthetic and compliance.owner.name:
+                # Synthetic dossier path — owner fields are populated by
+                # the generator and read as a real Indian record.
+                challan_violation_type = violation_label or "Compliance violation"
+                owner_name_final = compliance.owner.name
+                owner_phone_final = compliance.owner.phone
+                owner_email_final = compliance.owner.email
+            elif is_unregistered:
+                # Last-resort fallback (shouldn't happen now that
+                # assess_compliance always returns synthetic for unknown
+                # plates, but kept defensive in case the synthetic engine
+                # itself errors).
+                fine = FINE_AMOUNTS.get("unregistered_vehicle", fine)
+                challan_violation_type = "Unregistered Vehicle"
+                owner_name_final = "Unknown Owner (Registry Out-of-Sync)"
+                owner_phone_final: Optional[str] = None
+                owner_email_final: Optional[str] = None
+            else:
+                challan_violation_type = violation_label or "Compliance violation"
+                owner_name_final = compliance.owner.name
+                owner_phone_final = compliance.owner.phone
+                owner_email_final = compliance.owner.email
+
+            # OCR safety gate — never auto-issue a challan from a borderline
+            # OCR read. The pipeline already requires `ocr_reliable` to even
+            # call us, but this is a defense-in-depth check: real govt
+            # systems require ≥0.80 OCR confidence before any auto-action.
+            CHALLAN_OCR_CONFIDENCE_THRESHOLD = 0.80
+            if (ocr_conf or 0) < CHALLAN_OCR_CONFIDENCE_THRESHOLD:
+                logger.warning(
+                    "demo_challan_suppressed_low_ocr",
+                    plate=plate,
+                    ocr_confidence=round(ocr_conf, 3),
+                    threshold=CHALLAN_OCR_CONFIDENCE_THRESHOLD,
+                    risk=compliance.risk_score,
+                    detection_id=str(det.id),
+                )
+                # Mark detection for manual review instead of issuing.
+                det.violation_type = (
+                    (det.violation_type or "Manual review") + " — manual review required"
+                )
+                await session.commit()
+                return det.id
+
             cn = f"CHN-{datetime.utcnow().strftime('%y%m')}-{uuid.uuid4().hex[:6].upper()}"
+            desc_suffix = " · synthetic intel" if is_synthetic else ""
             ch = Challan(
                 challan_number=cn,
                 vehicle_id=veh_id,
                 detection_id=det.id,
-                violation_type=violation_label or "Compliance violation",
+                violation_type=challan_violation_type,
                 violation_description=(
                     f"AI auto-issued ({compliance.enforcement_action}, "
-                    f"risk {compliance.risk_score}/100)"
+                    f"risk {compliance.risk_score}/100){desc_suffix}"
                 ),
                 plate_number=plate,
                 fine_amount=fine,
                 status=ChallanStatus.ISSUED,
                 issued_at=datetime.now(timezone.utc),
-                owner_name=compliance.owner.name,
-                owner_phone=compliance.owner.phone,
-                owner_email=compliance.owner.email,
+                owner_name=owner_name_final,
+                owner_phone=owner_phone_final,
+                owner_email=owner_email_final,
             )
             session.add(ch)
             logger.info(
@@ -930,6 +998,16 @@ async def _persist_detection(
                 fine=fine,
                 risk=compliance.risk_score,
             )
+            if is_unregistered:
+                # Surface separately so registry-sync dashboards can count
+                # these without parsing violation_type strings.
+                logger.warning(
+                    "demo_challan_unregistered_vehicle",
+                    challan_number=cn,
+                    plate=plate,
+                    fine=fine,
+                    risk=compliance.risk_score,
+                )
 
         await session.commit()
         return det.id

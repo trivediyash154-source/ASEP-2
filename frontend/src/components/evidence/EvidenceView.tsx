@@ -14,11 +14,10 @@ import { detectionsApi } from "@/lib/api/endpoints";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import type { Detection } from "@/lib/types";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+import { getApiUrl } from "@/lib/api/client";
 
 function evidenceUrl(path: string | null | undefined): string | null {
-  return path ? `${API_URL}/uploads/${path}` : null;
+  return path ? `${getApiUrl()}/uploads/${path}` : null;
 }
 
 /* ── Threat level from confidence ─────────────────────────────────── */

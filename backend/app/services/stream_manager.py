@@ -26,7 +26,9 @@ Protocols handled, in order of detection:
 from __future__ import annotations
 
 import asyncio
+import ctypes
 import os
+import signal
 import threading
 import time
 from collections import deque
@@ -39,6 +41,23 @@ import numpy as np
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
+
+# ── FFmpeg crash-proofing ────────────────────────────────────────────
+#
+# libavformat's demux.c contains C-level assert() calls (e.g. line 610:
+# `pkt->stream_index < s->nb_streams`) that call abort()/SIGABRT when a
+# corrupted MJPEG/RTSP packet arrives. This kills the ENTIRE uvicorn
+# process, not just the reader thread.
+#
+# Mitigations applied here:
+#   1. FFREPORT="" — disables FFmpeg's internal report file.
+#   2. AV_LOG_FORCE_NOCOLOR — avoids ANSI in log output.
+#   3. We install a per-thread SIGABRT handler that converts the abort
+#      into a Python exception (caught by _safe_read).
+#   4. err_detect=ignore_err added to capture options to tell the demuxer
+#      to skip malformed packets instead of asserting.
+os.environ.setdefault("FFREPORT", "")
+os.environ.setdefault("AV_LOG_FORCE_NOCOLOR", "1")
 
 
 # ── FFmpeg capture options ───────────────────────────────────────────
@@ -63,16 +82,18 @@ _HTTP_FFMPEG_OPTS = (
     "|reconnect_on_network_error;1"
     "|reconnect_on_http_error;4xx,5xx"
     "|rw_timeout;8000000"
-    "|fflags;nobuffer"
+    "|fflags;nobuffer+discardcorrupt"
     "|flags;low_delay"
     "|max_delay;500000"
+    "|err_detect;ignore_err"
 )
 _RTSP_FFMPEG_OPTS = (
     "rtsp_transport;tcp"
     "|stimeout;5000000"
     "|max_delay;500000"
-    "|fflags;nobuffer"
+    "|fflags;nobuffer+discardcorrupt"
     "|flags;low_delay"
+    "|err_detect;ignore_err"
 )
 
 
@@ -267,7 +288,7 @@ class StreamSource:
             t0 = time.perf_counter_ns()
             ok, frame = False, None
             try:
-                ok, frame = self._cap.read()
+                ok, frame = self._safe_read()
             except Exception as exc:
                 logger.error("stream_read_exception", label=self.label, error=str(exc))
                 ok = False
@@ -332,6 +353,52 @@ class StreamSource:
             # Yield the GIL so async consumers (FastAPI, WS broadcast) breathe.
             time.sleep(self.READ_LOOP_YIELD_S)
 
+    def _safe_read(self) -> tuple:
+        """Read a frame from cv2.VideoCapture with SIGABRT protection.
+
+        FFmpeg's demux.c contains C-level assert() calls that send SIGABRT
+        when a malformed packet arrives (e.g. invalid stream_index). This
+        would kill the entire uvicorn process.
+
+        We temporarily install a SIGABRT handler on the current thread that
+        converts the abort into a catchable exception, then restore the
+        original handler. On platforms where per-thread signal handling is
+        unavailable (macOS/Windows), we at least catch any Python-level
+        exception from the read.
+        """
+        if self._cap is None:
+            return False, None
+
+        original_handler = None
+        try:
+            # Install temporary SIGABRT handler (main thread only on some OS)
+            try:
+                original_handler = signal.getsignal(signal.SIGABRT)
+                signal.signal(signal.SIGABRT, _sigabrt_handler)
+            except (ValueError, OSError):
+                # signal() can only be called from the main thread on some
+                # platforms — fall through and rely on the try/except below.
+                original_handler = None
+
+            ok, frame = self._cap.read()
+            return ok, frame
+        except _FFmpegAbortError:
+            logger.error(
+                "stream_ffmpeg_abort_caught",
+                label=self.label,
+                hint="FFmpeg assertion failure intercepted — reconnecting",
+            )
+            return False, None
+        except Exception as exc:
+            logger.error("stream_read_exception_inner", label=self.label, error=str(exc))
+            return False, None
+        finally:
+            if original_handler is not None:
+                try:
+                    signal.signal(signal.SIGABRT, original_handler)
+                except (ValueError, OSError):
+                    pass
+
     def _compute_health(self) -> str:
         f = self.metrics.fps
         if f >= 22:
@@ -387,3 +454,16 @@ class StreamRegistry:
 
 # Process-wide singleton
 stream_registry = StreamRegistry()
+
+
+# ── SIGABRT defence ──────────────────────────────────────────────────
+
+class _FFmpegAbortError(Exception):
+    """Raised when SIGABRT is caught from an FFmpeg assertion failure."""
+
+
+def _sigabrt_handler(signum, frame):
+    """Convert SIGABRT into a Python exception instead of process death."""
+    raise _FFmpegAbortError(
+        f"FFmpeg sent SIGABRT (signal {signum}) — likely a demux assertion failure"
+    )

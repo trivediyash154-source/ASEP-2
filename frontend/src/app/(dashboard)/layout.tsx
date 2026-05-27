@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 import { useNotificationBus } from "@/lib/hooks/useNotificationBus";
 import { IncidentResponseOverlay } from "@/components/shared/incident/IncidentResponseOverlay";
+import { getDemoSession, sessionToUser } from "@/lib/auth/demo-session";
 
 /**
  * Auth gate for /dashboard/* — three-state recovery machine.
@@ -45,54 +46,61 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const verify = useCallback(async () => {
     attemptRef.current += 1;
     const attempt = attemptRef.current;
-    setPhase("checking");
 
-    // No token at all? Skip the round-trip — the user just needs to log in.
-    if (!getAccessToken()) {
-      log.info("auth", "verify_skip_no_token");
-      setPhase("no-session");
+    // ── Demo-first gate ──────────────────────────────────────────
+    // Truth source for "is this operator allowed to see the dashboard?"
+    // is the local DemoSession. If it exists and hasn't expired, the
+    // dashboard renders immediately — no network round-trip blocks the
+    // operator console. /auth/me only runs in the background as
+    // enrichment, never as a gate.
+    const demo = getDemoSession();
+    const backendToken = getAccessToken();
+    const { isAuthenticated: storeAuthed, user: storeUser } =
+      useAuthStore.getState();
+
+    if (demo || (storeAuthed && storeUser)) {
+      // If the persisted Zustand store lost its `user` (devtools clear,
+      // partial localStorage wipe, etc.) but the demo session survived,
+      // re-hydrate so downstream components (Sidebar / TopBar) get a
+      // populated `user` immediately.
+      if (demo && !storeUser) {
+        useAuthStore.setState({
+          user: sessionToUser(demo),
+          isAuthenticated: true,
+          lastError: null,
+        });
+      }
+      log.info("auth", "verify_demo_session_ok", { attempt });
+      setPhase("ok");
+      // Best-effort: keep the user object in sync with the backend if a
+      // real JWT happens to be live. Failure here is silent — store
+      // reconstructs `user` from the demo session if /auth/me 401s.
+      if (backendToken) {
+        abortRef.current?.abort();
+        const controller = new AbortController();
+        abortRef.current = controller;
+        const timer = setTimeout(() => controller.abort(), HARD_TIMEOUT_MS);
+        try {
+          await fetchMe({ signal: controller.signal });
+        } catch {
+          /* swallowed — demo session keeps the operator in */
+        } finally {
+          clearTimeout(timer);
+        }
+      }
       return;
     }
 
-    // Optimistic: if we already have a persisted user, render the dashboard
-    // immediately and verify in the background. This keeps the dashboard
-    // responsive even if the backend is briefly degraded.
-    if (useAuthStore.getState().isAuthenticated && useAuthStore.getState().user) {
-      log.info("auth", "verify_optimistic_boot");
-      setPhase("ok");
+    // No demo session and no backend session — operator must log in.
+    // Defensive wipe of the persisted Zustand state: if it still claims
+    // `isAuthenticated=true` we'd otherwise bounce between /login and
+    // /dashboard forever (login redirects authed users to dashboard,
+    // dashboard sees no session and redirects back to login).
+    if (storeAuthed || storeUser) {
+      useAuthStore.setState({ user: null, isAuthenticated: false, lastError: null });
     }
-
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    const timer = setTimeout(() => {
-      log.warn("auth", "verify_hard_timeout", { attempt, ms: HARD_TIMEOUT_MS });
-      controller.abort();
-    }, HARD_TIMEOUT_MS);
-
-    try {
-      await fetchMe({ signal: controller.signal });
-    } finally {
-      clearTimeout(timer);
-    }
-
-    // Re-read state after the call settled.
-    const { isAuthenticated: authed, lastError } = useAuthStore.getState();
-    if (authed) {
-      setPhase("ok");
-      log.info("auth", "verify_ok", { attempt });
-    } else if (lastError) {
-      // Backend reachable but no session, or hard error — depending on token presence.
-      if (getAccessToken()) {
-        log.warn("auth", "verify_stalled", { attempt, error: lastError });
-        setPhase("stalled");
-      } else {
-        setPhase("no-session");
-      }
-    } else {
-      setPhase("no-session");
-    }
+    log.info("auth", "verify_no_session", { attempt });
+    setPhase("no-session");
   }, [fetchMe]);
 
   useEffect(() => {
