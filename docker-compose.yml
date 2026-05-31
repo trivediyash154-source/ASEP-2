@@ -87,6 +87,14 @@ services:
       target: development
     container_name: enforcement-backend
     <<: [*common-env, *restart-policy]
+    environment:
+      # Demo defaults. LIVE_ACTIVITY_ENABLED=false keeps the synthetic background
+      # generator OFF so it can never mix fabricated detections into the live feed
+      # during a VIP demo. The DEMO_* flags drive Phase-1 guaranteed results +
+      # staged plates (see app/services/staged_plates.py). Override in .env if needed.
+      LIVE_ACTIVITY_ENABLED: "false"
+      DEMO_GUARANTEE_RESULT: "true"
+      DEMO_STAGED_PLATES: "true"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
