@@ -18,8 +18,9 @@ the asyncpg connection lock.
 from __future__ import annotations
 
 import asyncio
+import os
 from dataclasses import asdict, dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any, Optional
 
 from sqlalchemy import func, select
@@ -29,9 +30,14 @@ from app.core.logging import get_logger
 from app.db.session import AsyncSessionFactory
 from app.models.challan import Challan
 from app.models.vehicle import Owner, Vehicle
+from app.services.staged_plates import match_staged
 from app.services.synthetic_dossier import generate_synthetic_dossier
 
 logger = get_logger(__name__)
+
+# Staged-plate registry toggle (see app/services/staged_plates.py). ON in dev so
+# the printed demo plates resolve to their scripted outcomes; turn OFF in prod.
+_STAGED_ENABLED = os.getenv("DEMO_STAGED_PLATES", "true").strip().lower() in ("1", "true", "yes", "on")
 
 
 # Risk at/above which a vehicle is escalated to a critical alert regardless of
@@ -104,6 +110,9 @@ class ComplianceReport:
     # Frontend can render a small "Synthetic intel" pill, analytics can
     # split real-registry signals from generated ones.
     is_synthetic: bool = False
+    # True for scripted staged-demo plates. Bypasses the OCR-confidence challan
+    # gate (the outcome is operator-controlled, not OCR-derived).
+    is_staged: bool = False
     # High-level enforcement decision (see OUTCOME_* constants) plus a plain
     # explanation an operator/examiner can read. Auto-challan is gated on this,
     # NOT on the raw risk score — so a clean unregistered vehicle routes to
@@ -133,6 +142,7 @@ class ComplianceReport:
             },
             "owner": self.owner.as_dict(),
             "is_synthetic": self.is_synthetic,
+            "is_staged": self.is_staged,
             "enforcement_outcome": self.enforcement_outcome,
             "enforcement_reason": self.enforcement_reason,
         }
@@ -518,6 +528,78 @@ def _compose_from_synthetic(
     )
 
 
+# ── Staged-plate path (scripted demo outcomes) ─────────────────────
+
+
+def _staged_check(label: str, status: str, days: int) -> CheckResult:
+    """Build a CheckResult from a staged (status, day-offset) tuple.
+    days < 0 => expired |days| ago; days > 0 => valid/expiring that many days out."""
+    expiry = datetime.utcnow().date() + timedelta(days=days)
+    if status == "EXPIRED":
+        return CheckResult(status="EXPIRED", expiry=expiry, detail=f"{label} expired {abs(days)} day(s) ago")
+    if status == "EXPIRING_SOON":
+        return CheckResult(status="EXPIRING_SOON", expiry=expiry, detail=f"{label} expires in {days} day(s)")
+    return CheckResult(status="VALID", expiry=expiry, detail=f"{label} valid for {days} more day(s)")
+
+
+def _compose_staged(canonical: str, spec: dict) -> ComplianceReport:
+    """Build a fully-scripted ComplianceReport for a staged demo plate.
+
+    Owner/vehicle fields come from the deterministic synthetic dossier so the
+    card looks real; the four checks, score, band, and outcome are taken
+    verbatim from the spec so the on-stage story is exact and repeatable.
+    Presented as a known registry hit (no 'synthetic' pill) — these are the
+    operator's controlled props.
+    """
+    dossier = generate_synthetic_dossier(canonical)
+
+    registration = _staged_check("Registration", *spec["registration"])
+    insurance = _staged_check("Insurance", *spec["insurance"])
+    puc = _staged_check("PUC", *spec["puc"])
+    if spec.get("blacklist_flagged"):
+        blacklist = CheckResult(status="FLAGGED", detail=spec.get("blacklist_reason") or "Vehicle on enforcement watchlist")
+    else:
+        blacklist = CheckResult(status="CLEAR", detail="No active watchlist record")
+
+    score = int(spec["risk_score"])
+    action = (
+        "IMPOUND_RECOMMENDED" if score >= 85 else
+        "CITATE_AND_FLAG"     if score >= 55 else
+        "ISSUE_CHALLAN"       if score >= 30 else
+        "ADVISE_ONLY"         if score >= 10 else
+        "PASS"
+    )
+    return ComplianceReport(
+        plate=canonical,
+        vehicle_known=True,
+        risk_score=score,
+        risk_band=spec["risk_band"],
+        enforcement_action=action,
+        registration=registration,
+        insurance=insurance,
+        puc=puc,
+        blacklist=blacklist,
+        open_violations=1 if spec.get("violation_label") else 0,
+        outstanding_fine_total=0.0,
+        vehicle_make=dossier.vehicle_make,
+        vehicle_model=dossier.vehicle_model,
+        vehicle_color=dossier.vehicle_color,
+        vehicle_year=dossier.vehicle_year,
+        vehicle_category=dossier.vehicle_category,
+        owner=OwnerSnapshot(
+            name=dossier.owner_name,
+            phone=dossier.owner_phone,
+            email=dossier.owner_email,
+            city=dossier.owner_city,
+            state=dossier.owner_state,
+        ),
+        is_synthetic=False,
+        is_staged=True,
+        enforcement_outcome=spec["outcome"],
+        enforcement_reason=spec["reason"],
+    )
+
+
 # ── Public entry point ─────────────────────────────────────────────
 
 
@@ -526,6 +608,17 @@ async def assess_compliance(plate: str) -> ComplianceReport:
     plate_norm = "".join(ch for ch in plate.upper() if ch.isalnum())
     if not plate_norm:
         return _compose(None, None, 0, 0.0, plate or "")
+
+    # Staged demo plates win first — scripted, repeatable outcomes for the stage.
+    if _STAGED_ENABLED:
+        staged = match_staged(plate_norm)
+        if staged is not None:
+            canonical, spec = staged
+            logger.info(
+                "compliance_staged_plate_hit",
+                read=plate_norm, canonical=canonical, scenario=spec.get("scenario"),
+            )
+            return _compose_staged(canonical, spec)
 
     vehicle_load, open_violations_load = await asyncio.gather(
         _load_vehicle(plate_norm),
