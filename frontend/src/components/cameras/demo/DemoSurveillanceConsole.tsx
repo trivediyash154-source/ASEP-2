@@ -20,6 +20,7 @@ import { TelemetryHUD, type Telemetry } from "./TelemetryHUD";
 import { EnforcementStack, type EnforcementCard } from "./EnforcementStack";
 import { MobileCameraConnect } from "./MobileCameraConnect";
 import { PipelineDiagnosticsPanel } from "./PipelineDiagnosticsPanel";
+import { PipelineRail } from "./PipelineRail";
 
 const DEMO_CAMERA_ID = "demo-primary";
 const MAX_OCR_ACTIVITY = 30;
@@ -372,6 +373,9 @@ export function DemoSurveillanceConsole() {
           )}
         </div>
       </header>
+
+      {/* ── Live pipeline rail: DECODE → DETECT → OCR → COMPLIANCE → CHALLAN ── */}
+      <PipelineRail state={canvasState} payload={payload} ocrAttemptKey={ocrActivity.length} />
 
       {/* ── Main grid: video + enforcement stack ───────────── */}
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_minmax(340px,400px)] gap-6 items-start">
