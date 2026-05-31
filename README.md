@@ -57,19 +57,25 @@
 
 ---
 
-## 🎬 The Pitch (simulated)
+## 🎬 The Pitch — 60-second storyboard
 
 <div align="center">
 
-[![Watch the pipeline](https://via.placeholder.com/820x420/0F172A/7B2FBE?text=%E2%96%B6+CLICK%3A+plate+to+challan%2C+live%2C+unedited)](#)
-
-<sub>▲ Placeholder card — drop the real screen capture here. Suggested clip: connect phone → plate locks → enforcement card slides in.</sub>
+[![Watch the live pipeline](https://img.shields.io/badge/▶_WATCH-plate_to_challan,_live-7B2FBE?style=for-the-badge&logo=youtube&logoColor=white)](#)
 
 </div>
 
-<!-- ![real-time detection loop](https://via.placeholder.com/800x400?text=GIF:+Detection+to+Challan+loop) -->
-<!-- ![compliance fan-out](https://via.placeholder.com/800x400?text=GIF:+4+concurrent+RTO+checks) -->
-<!-- ![synthetic dossier](https://via.placeholder.com/800x400?text=GIF:+Unknown+plate+to+believable+owner) -->
+| ⏱️ | On screen | Under the hood |
+| :--- | :--- | :--- |
+| `0:00` | Operator connects a phone camera | `POST /cameras/demo/{id}/connect` opens the MJPEG stream |
+| `0:03` | Vehicle box snaps on · **"ANALYZING"** | YOLOv8 detection + IoU tracker |
+| `0:05` | Plate text types out · **"OCR EXTRACTING"** | EasyOCR read + Indian-format normalize |
+| `0:06` | Enforcement card slides in | 4 concurrent RTO checks → risk band → outcome |
+| `0:07` | Evidence thumbnail appears | annotated frame + plate crop written to disk |
+
+<!-- Replace the badge above with a real recording once captured:
+       ![demo](docs/screenshots/demo.gif)
+     Keep media in-repo (docs/screenshots/) so it never depends on a 3rd-party image host. -->
 
 ---
 
@@ -114,6 +120,21 @@ The platform is built to **drop directly into existing government infrastructure
 integration is an interface, not a rewrite — and is hardened for the operational realities of public
 surveillance: rotating JWTs, audit-logged everything, RBAC at every endpoint, and a recoverable session
 machine that never deadlocks the operator console.
+
+---
+
+## 🧱 Tech Stack at a Glance
+
+| Layer | Technology | Role |
+| :--- | :--- | :--- |
+| 🚪 Proxy | **Nginx** | TLS termination · static evidence · routing |
+| ⚛️ Frontend | **Next.js 14** · TypeScript · Tailwind · Zustand · React Query | Operator console |
+| 🐍 Backend | **FastAPI** (async) · Uvicorn | REST + WebSockets |
+| 👁️ Vision | **YOLOv8n** (Ultralytics) · OpenCV | Vehicle + plate detection |
+| 🔤 OCR | **EasyOCR** (active) · PaddleOCR / Tesseract (pluggable) | Plate text recognition |
+| 🔧 Workers | **Celery** (worker + beat) · Flower | Notifications · reports · scheduled jobs |
+| 🗄️ Data | **PostgreSQL** · **Redis** | Persistence · cache · pub/sub · broker |
+| 📈 Observability | **Prometheus** · structured logs · event-loop watchdog | Metrics + health |
 
 ---
 
@@ -521,6 +542,11 @@ xychart-beta
     bar [175, 45]
 ```
 
+| Vehicle detection (YOLOv8n) | Latency |
+| :--- | :---: |
+| 🖥️ CPU — measured, this build | ~100 ms typical · ~175 ms P95 |
+| ⚡ GPU — target (not present here) | ~45 ms |
+
 <sub>The classic "45 vs 175" holds for the **detection stage**. End-to-end on CPU is dominated by OCR
 (above); GPU is required to hit sub-second end-to-end.</sub>
 
@@ -557,6 +583,15 @@ flowchart TD
     class C1,C2,C3,C4 check;
     class RISK,OUT risk;
 ```
+
+### 🎚️ Risk bands → outcome → action
+
+| Band | Score | Typical outcome | Action |
+| :--- | :---: | :--- | :--- |
+| 🟢 **CLEAR** | 0–29 | `CLEAR` / `WARNING` | Log only |
+| 🟡 **MODERATE** | 30–54 | `MANUAL_REVIEW` | Officer queue |
+| 🟠 **HIGH** | 55–79 | `CHALLAN` | Auto-issue **if OCR ≥ 0.80**, else manual review |
+| 🔴 **CRITICAL** | 80–100 | `CRITICAL_ALERT` | Alerts channel + challan |
 
 ### 🚓 Enforcement Decision Tree — detection ▸ challan ▸ escalation
 
@@ -1165,13 +1200,23 @@ timeline
 
 ---
 
-## ⭐ Star History (placeholder)
+## ⭐ Star History
 
-<div align="center">
+```text
+  stars
+    ▲
+    │                                          ╭──────────
+    │                                 ╭────────╯
+    │                        ╭────────╯
+    │               ╭────────╯
+    │      ╭────────╯
+    │ ╭────╯
+    └─┴────┴────────┴────────┴────────┴────────┴────────▶  time
+        Q2 2026        Q3 2026        Q4 2026        Q1 2027
+```
 
-[![Star History](https://via.placeholder.com/720x300/0F172A/22C55E?text=%E2%AD%90+Star+History+%E2%80%94+up+and+to+the+right)](#)
-
-</div>
+<sub>Swap in the live widget once the repo is public:
+<code>https://api.star-history.com/svg?repos=your-org/vaahan-ai&type=Date</code></sub>
 
 ---
 
