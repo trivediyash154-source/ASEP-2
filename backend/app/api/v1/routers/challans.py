@@ -139,3 +139,23 @@ async def download_challan_pdf(
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+@router.get("/by-detection/{detection_id}/pdf")
+async def download_challan_pdf_by_detection(
+    detection_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    _=Depends(require_operator),    # PDF embeds owner PII → operator+
+):
+    """Render the e-challan PDF for the challan tied to a detection — used by the
+    live demo enforcement card, which carries the detection id."""
+    service = ChallanService(db)
+    try:
+        pdf_bytes = await service.generate_pdf_by_detection(detection_id)
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"inline; filename=challan_{detection_id}.pdf"},
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))

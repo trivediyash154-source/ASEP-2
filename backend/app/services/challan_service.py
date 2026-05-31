@@ -113,6 +113,22 @@ class ChallanService:
         )
         return ChallanResponse.model_validate(challan)
 
+    async def generate_pdf_by_detection(self, detection_id: uuid.UUID) -> bytes:
+        """Find the most recent challan for a detection and render its PDF.
+        Lets the live demo card (which only carries the detection id) open its
+        e-challan without a separate challan-id round-trip."""
+        from sqlalchemy import select
+
+        res = await self.db.execute(
+            select(Challan)
+            .where(Challan.detection_id == detection_id)
+            .order_by(Challan.issued_at.desc())
+        )
+        challan = res.scalars().first()
+        if not challan:
+            raise ValueError(f"No challan on record for detection {detection_id}")
+        return await self.generate_pdf(challan.id)
+
     async def generate_pdf(self, challan_id: uuid.UUID) -> bytes:
         """
         Generates a professional PDF challan receipt using ReportLab.
@@ -229,7 +245,40 @@ class ChallanService:
 
         # Fine amount box
         story.append(Paragraph(f"FINE AMOUNT: ₹{challan.fine_amount:,.2f}", fine_style))
-        story.append(Spacer(1, 5 * mm))
+        story.append(Spacer(1, 4 * mm))
+
+        # ── Payment QR (ReportLab built-in — no extra dependency) ──
+        try:
+            from reportlab.graphics.barcode.qr import QrCodeWidget
+            from reportlab.graphics.shapes import Drawing
+
+            pay_url = (
+                "https://echallan.parivahan.gov.in/pay"
+                f"?challan={challan.challan_number}&amt={int(challan.fine_amount)}"
+            )
+            qrw = QrCodeWidget(pay_url)
+            qb = qrw.getBounds()
+            qw, qh = (qb[2] - qb[0]) or 1, (qb[3] - qb[1]) or 1
+            qsize = 32 * mm
+            qd = Drawing(qsize, qsize, transform=[qsize / qw, 0, 0, qsize / qh, 0, 0])
+            qd.add(qrw)
+            qr_table = Table(
+                [[qd, Paragraph(
+                    "<b>Scan to pay</b><br/>UPI · NetBanking · Card<br/>"
+                    "echallan.parivahan.gov.in<br/>"
+                    f"<font size=7 color='#90a4ae'>Ref: {challan.challan_number}</font>",
+                    value_style,
+                )]],
+                colWidths=[40 * mm, 100 * mm],
+            )
+            qr_table.setStyle(TableStyle([
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("PADDING", (0, 0), (-1, -1), 4),
+            ]))
+            story.append(qr_table)
+            story.append(Spacer(1, 5 * mm))
+        except Exception as e:
+            logger.warning("pdf_qr_failed", error=str(e))
 
         # ── Owner details ─────────────────────────────────────────
         if challan.owner_name or challan.owner_phone:
@@ -252,9 +301,20 @@ class ChallanService:
             story.append(Spacer(1, 5 * mm))
 
         # ── Evidence photos ───────────────────────────────────────
-        if challan.evidence_paths:
+        # Demo challans store evidence on the linked Detection, not on the
+        # challan row — fall back to it so the e-challan always shows proof.
+        evidence_paths = dict(challan.evidence_paths or {})
+        if not evidence_paths and challan.detection_id:
+            from app.models.detection import Detection
+            det = await self.db.get(Detection, challan.detection_id)
+            if det is not None:
+                if det.frame_path:
+                    evidence_paths["scene"] = det.frame_path
+                if det.plate_crop_path:
+                    evidence_paths["plate"] = det.plate_crop_path
+        if evidence_paths:
             evidence_images = []
-            for key, rel_path in challan.evidence_paths.items():
+            for key, rel_path in evidence_paths.items():
                 abs_path = Path(settings.UPLOAD_DIR) / rel_path
                 if abs_path.exists():
                     try:

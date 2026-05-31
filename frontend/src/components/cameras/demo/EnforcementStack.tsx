@@ -5,16 +5,19 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   AlertOctagon,
   CheckCircle2,
+  FileDown,
   FileImage,
+  Loader2,
   ShieldAlert,
   ShieldCheck,
   ShieldQuestion,
   Sparkles,
   type LucideIcon,
 } from "lucide-react";
+import { toast } from "sonner";
 
 import { cn, formatCurrency } from "@/lib/utils";
-import { getApiUrl } from "@/lib/api/client";
+import { apiClient, getApiUrl } from "@/lib/api/client";
 
 export interface ComplianceCheck {
   status: string;
@@ -45,12 +48,12 @@ export interface ComplianceBundle {
   enforcement_reason?: string;
 }
 
-const OUTCOME_UI: Record<string, { label: string; box: string; Icon: LucideIcon }> = {
-  CRITICAL_ALERT: { label: "Critical Alert", box: "bg-peach-100 border-peach-300 text-peach-900", Icon: AlertOctagon },
-  CHALLAN: { label: "Challan Issued", box: "bg-peach-50 border-peach-200 text-peach-800", Icon: ShieldAlert },
-  MANUAL_REVIEW: { label: "Manual Verification Required", box: "bg-bronze-50 border-bronze-200 text-bronze-900", Icon: ShieldQuestion },
-  WARNING: { label: "Warning", box: "bg-bronze-50 border-bronze-200 text-bronze-800", Icon: AlertOctagon },
-  CLEAR: { label: "Clear", box: "bg-sage-50 border-sage-200 text-sage-800", Icon: ShieldCheck },
+const OUTCOME_UI: Record<string, { label: string; mr: string; box: string; Icon: LucideIcon }> = {
+  CRITICAL_ALERT: { label: "Critical Alert", mr: "गंभीर सूचना", box: "bg-peach-100 border-peach-300 text-peach-900", Icon: AlertOctagon },
+  CHALLAN: { label: "Challan Issued", mr: "चलन जारी", box: "bg-peach-50 border-peach-200 text-peach-800", Icon: ShieldAlert },
+  MANUAL_REVIEW: { label: "Manual Verification Required", mr: "स्वहस्ते पडताळणी आवश्यक", box: "bg-bronze-50 border-bronze-200 text-bronze-900", Icon: ShieldQuestion },
+  WARNING: { label: "Warning", mr: "इशारा", box: "bg-bronze-50 border-bronze-200 text-bronze-800", Icon: AlertOctagon },
+  CLEAR: { label: "Clear", mr: "सर्व ठीक", box: "bg-sage-50 border-sage-200 text-sage-800", Icon: ShieldCheck },
 };
 
 export interface EnforcementCard {
@@ -205,7 +208,10 @@ function EnforcementCardView({ card }: { card: EnforcementCard }) {
             <OutcomeIcon className="h-3 w-3" />
             Enforcement outcome
           </span>
-          <span className="font-mono text-xs font-semibold">{outcomeMeta.label}</span>
+          <span className="font-mono text-xs font-semibold text-right">
+            {outcomeMeta.label}
+            <span className="block text-[0.6rem] font-sans font-medium opacity-70">{outcomeMeta.mr}</span>
+          </span>
         </div>
         {reason && (
           <p className="mt-1 text-2xs leading-snug">
@@ -217,13 +223,17 @@ function EnforcementCardView({ card }: { card: EnforcementCard }) {
 
       {/* Auto-challan — only for challan / critical outcomes */}
       {isChallan && (
-        <div className="mt-2 rounded-lg bg-peach-50 border border-peach-200 px-2.5 py-2 flex items-center justify-between gap-2">
-          <span className="inline-flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.14em] text-peach-800">
-            <AlertOctagon className="h-3 w-3" />
-            {outcome === "CRITICAL_ALERT" ? "Critical · auto-challan" : "Auto-challan"}
-          </span>
-          <TypewriterChallan seed={card.id} />
-        </div>
+        <>
+          <div className="mt-2 rounded-lg bg-peach-50 border border-peach-200 px-2.5 py-2 flex items-center justify-between gap-2">
+            <span className="inline-flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.14em] text-peach-800">
+              <AlertOctagon className="h-3 w-3" />
+              {outcome === "CRITICAL_ALERT" ? "Critical · auto-challan" : "Auto-challan"}
+              <span className="font-sans font-medium normal-case tracking-normal opacity-70">· ई-चलन</span>
+            </span>
+            <TypewriterChallan seed={card.id} />
+          </div>
+          <ViewChallanButton detectionId={card.id} />
+        </>
       )}
 
       {/* Manual verification — clean unregistered vehicle */}
@@ -246,6 +256,38 @@ function EnforcementCardView({ card }: { card: EnforcementCard }) {
 }
 
 // ── Pieces ──────────────────────────────────────────────────────────
+
+function ViewChallanButton({ detectionId }: { detectionId: string }) {
+  const [busy, setBusy] = useState(false);
+  async function open() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      // Auth header is added by apiClient, so we fetch as a blob (a plain
+      // <a href> wouldn't carry the JWT) and open the generated PDF.
+      const r = await apiClient.get(`/challans/by-detection/${detectionId}/pdf`, {
+        responseType: "blob",
+      });
+      const url = URL.createObjectURL(r.data as Blob);
+      window.open(url, "_blank", "noopener");
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch {
+      toast.error("E-challan not ready", { description: "Give the pipeline a moment, then try again." });
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <button
+      onClick={open}
+      disabled={busy}
+      className="mt-2 w-full inline-flex items-center justify-center gap-1.5 rounded-lg border border-peach-300 bg-peach-50 hover:bg-peach-100 text-peach-900 h-8 text-2xs font-semibold uppercase tracking-[0.14em] transition-colors disabled:opacity-60"
+    >
+      {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />}
+      {busy ? "Generating…" : "View e-challan (PDF)"}
+    </button>
+  );
+}
 
 function CheckPill({ label, check }: { label: string; check?: ComplianceCheck }) {
   const status = check?.status ?? "UNKNOWN";
