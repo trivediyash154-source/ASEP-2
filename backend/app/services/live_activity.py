@@ -38,8 +38,17 @@ JITTER = 2.5
 
 
 def _is_enabled() -> bool:
-    if os.getenv("LIVE_ACTIVITY_ENABLED", "").lower() in ("1", "true", "yes"):
+    """Synthetic-detection generator toggle.
+
+    Explicit `LIVE_ACTIVITY_ENABLED` always wins (so operators testing the
+    real camera pipeline can force it OFF in dev with `=false`). When unset,
+    default to ON in dev / OFF in production.
+    """
+    raw = os.getenv("LIVE_ACTIVITY_ENABLED", "").strip().lower()
+    if raw in ("1", "true", "yes", "on"):
         return True
+    if raw in ("0", "false", "no", "off"):
+        return False
     return settings.APP_ENV.lower() not in ("production", "prod")
 
 

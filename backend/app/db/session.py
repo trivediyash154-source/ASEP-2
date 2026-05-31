@@ -14,7 +14,7 @@ logger = get_logger(__name__)
 
 engine: AsyncEngine = create_async_engine(
     settings.database_url,
-    echo=settings.DEBUG,
+    echo=settings.DB_ECHO,
     pool_size=20,
     max_overflow=40,
     pool_timeout=30,

@@ -34,6 +34,7 @@ import time
 from collections import deque
 from dataclasses import dataclass, field
 from typing import Optional, Union
+import urllib.request
 
 import cv2
 import numpy as np
@@ -125,6 +126,84 @@ class StreamMetrics:
         }
 
 
+# ── MJPEG Stream Reader ───────────────────────────────────────────────
+
+class MjpegStreamReader:
+    """Pure-Python MJPEG stream reader that bypasses FFmpeg's C-level demuxer.
+
+    This completely eliminates the risk of FFmpeg demuxer calling abort() / SIGABRT
+    on corrupted network packets, which would crash the entire Uvicorn process.
+    """
+    def __init__(self, url: str, timeout: float = 6.0):
+        self.url = url
+        self.timeout = timeout
+        self.response = None
+        # Persistent parse buffer — kept across read_frame() calls so bytes of
+        # the *next* frame that arrive in the same chunk are not discarded.
+        self._buf = bytearray()
+
+    def open(self) -> bool:
+        try:
+            self.response = urllib.request.urlopen(self.url, timeout=self.timeout)
+            return True
+        except Exception as e:
+            logger.warning("mjpeg_open_failed", url=self.url, error=str(e))
+            self.response = None
+            return False
+
+    def read_frame(self, stop_event: threading.Event) -> Optional[np.ndarray]:
+        if not self.response:
+            return None
+
+        buf = self._buf
+        try:
+            while not stop_event.is_set():
+                # First, try to extract a complete JPEG already sitting in the
+                # buffer from a previous read. Only hit the network when we
+                # genuinely need more bytes.
+                soi = buf.find(b'\xff\xd8')
+                if soi != -1:
+                    eoi = buf.find(b'\xff\xd9', soi)
+                    if eoi != -1:
+                        jpg_bytes = bytes(buf[soi:eoi + 2])
+                        # Drop everything up to and including this frame; keep
+                        # the tail (start of the next frame) for the next call.
+                        del buf[:eoi + 2]
+                        frame = cv2.imdecode(
+                            np.frombuffer(jpg_bytes, dtype=np.uint8), cv2.IMREAD_COLOR
+                        )
+                        if frame is not None:
+                            return frame
+                        # Corrupt JPEG — keep scanning for the next marker.
+                        continue
+                elif len(buf) > 1:
+                    # No start-of-image yet — keep only the last byte in case a
+                    # split 0xFF…0xD8 marker straddles two chunks.
+                    del buf[:-1]
+
+                chunk = self.response.read(8192)
+                if not chunk:
+                    return None
+                buf.extend(chunk)
+
+                if len(buf) > 10 * 1024 * 1024:
+                    logger.warning("mjpeg_buffer_overflow_clearing", url=self.url, size=len(buf))
+                    buf.clear()
+        except Exception as e:
+            logger.warning("mjpeg_read_frame_exception", url=self.url, error=str(e))
+            return None
+        return None
+
+    def close(self):
+        if self.response:
+            try:
+                self.response.close()
+            except Exception:
+                pass
+            self.response = None
+        self._buf.clear()
+
+
 # ── Stream source ────────────────────────────────────────────────────
 
 
@@ -154,6 +233,7 @@ class StreamSource:
         self._stop_event = threading.Event()
         self._opened_event = threading.Event()
         self._cap: Optional[cv2.VideoCapture] = None
+        self._mjpeg_reader: Optional[MjpegStreamReader] = None
         self._fps_window: deque[float] = deque(maxlen=30)
         self.metrics = StreamMetrics()
 
@@ -170,6 +250,12 @@ class StreamSource:
         self._stop_event.set()
         if self._thread:
             self._thread.join(timeout=4)
+        if self._mjpeg_reader is not None:
+            try:
+                self._mjpeg_reader.close()
+            except Exception:
+                pass
+            self._mjpeg_reader = None
         if self._cap is not None:
             try:
                 self._cap.release()
@@ -193,13 +279,19 @@ class StreamSource:
             frame, ts = self._buffer[-1]
             return frame, (time.perf_counter() - ts) * 1000.0
 
+    @property
+    def buffer_depth(self) -> int:
+        """Frames currently buffered (0 or 1 — the deque is a 1-slot double
+        buffer). Surfaced for the watchdog's queue-depth telemetry."""
+        return len(self._buffer)
+
     def wait_until_opened(self, timeout: float = CONNECT_TIMEOUT_S) -> bool:
         return self._opened_event.wait(timeout=timeout)
 
     # ── Producer thread ─────────────────────────────────────────
 
     def _open(self) -> bool:
-        """Open the cv2 capture with a sane timeout. Returns True on success."""
+        """Open the cv2 capture or MJPEG reader with a sane timeout. Returns True on success."""
         # Coerce source — pure-int strings → USB index
         src: Union[int, str]
         if isinstance(self.source, int):
@@ -209,10 +301,32 @@ class StreamSource:
         else:
             src = self.source
 
-        # ── Configure FFmpeg backend BEFORE opening ─────────────────
-        # This env var is read once per VideoCapture() construction.
         is_rtsp = isinstance(src, str) and src.lower().startswith("rtsp://")
         is_http = isinstance(src, str) and src.lower().startswith(("http://", "https://"))
+        is_hls = isinstance(src, str) and ".m3u8" in src.lower()
+
+        # Pure Python MJPEG reader for HTTP streams (e.g. DroidCam/IP Webcam)
+        if is_http and not is_hls:
+            logger.info("stream_open_mjpeg", source=str(src))
+            reader = MjpegStreamReader(src, timeout=self.CONNECT_TIMEOUT_S)
+            if reader.open():
+                self._mjpeg_reader = reader
+                self._opened_event.set()
+                self.metrics.health = "GOOD"
+                logger.info(
+                    "stream_opened_mjpeg",
+                    source=str(src),
+                    label=self.label,
+                )
+                return True
+            else:
+                logger.warning("stream_open_mjpeg_failed", source=str(src))
+                return False
+
+        self._mjpeg_reader = None
+
+        # ── Configure FFmpeg backend BEFORE opening ─────────────────
+        # This env var is read once per VideoCapture() construction.
         if is_rtsp:
             os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = _RTSP_FFMPEG_OPTS
         elif is_http:
@@ -265,7 +379,15 @@ class StreamSource:
 
         while not self._stop_event.is_set():
             # ── (re)connect ────────────────────────────────────
-            if self._cap is None or not self._cap.isOpened():
+            # IMPORTANT: an MJPEG phone source uses `self._mjpeg_reader`, NOT
+            # `self._cap` (which stays None for HTTP streams). Only (re)open
+            # when NEITHER transport is alive — otherwise we'd tear down and
+            # re-dial the phone on every loop iteration, hammering the IP
+            # Webcam server until it drops the connection ("auto-disconnect")
+            # and leaking sockets until the whole process wedges.
+            reader_alive = self._mjpeg_reader is not None
+            cap_alive = self._cap is not None and self._cap.isOpened()
+            if not reader_alive and not cap_alive:
                 opened = self._open()
                 if not opened:
                     backoff = self.RECONNECT_BACKOFF_S[min(attempt, len(self.RECONNECT_BACKOFF_S) - 1)]
@@ -317,10 +439,14 @@ class StreamSource:
                     stale_s=round(stale_s, 2),
                 )
                 try:
-                    self._cap.release()
+                    if self._mjpeg_reader is not None:
+                        self._mjpeg_reader.close()
+                        self._mjpeg_reader = None
+                    if self._cap is not None:
+                        self._cap.release()
+                        self._cap = None
                 except Exception:
                     pass
-                self._cap = None
                 self._opened_event.clear()
                 self.metrics.health = "OFFLINE"
                 consecutive_failures = 0
@@ -354,18 +480,11 @@ class StreamSource:
             time.sleep(self.READ_LOOP_YIELD_S)
 
     def _safe_read(self) -> tuple:
-        """Read a frame from cv2.VideoCapture with SIGABRT protection.
+        """Read a frame from cv2.VideoCapture or MjpegStreamReader with SIGABRT protection."""
+        if self._mjpeg_reader is not None:
+            frame = self._mjpeg_reader.read_frame(self._stop_event)
+            return (frame is not None), frame
 
-        FFmpeg's demux.c contains C-level assert() calls that send SIGABRT
-        when a malformed packet arrives (e.g. invalid stream_index). This
-        would kill the entire uvicorn process.
-
-        We temporarily install a SIGABRT handler on the current thread that
-        converts the abort into a catchable exception, then restore the
-        original handler. On platforms where per-thread signal handling is
-        unavailable (macOS/Windows), we at least catch any Python-level
-        exception from the read.
-        """
         if self._cap is None:
             return False, None
 

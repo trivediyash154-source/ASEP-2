@@ -44,6 +44,10 @@ def configure_logging() -> None:
         format="%(message)s",
         stream=sys.stdout,
         level=log_level,
+        # force=True so a second call (e.g. after alembic's fileConfig resets
+        # the root logger to WARN during bootstrap) actually re-installs our
+        # stdout handler and INFO level instead of being a no-op.
+        force=True,
     )
 
 

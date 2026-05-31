@@ -34,6 +34,25 @@ from app.services.synthetic_dossier import generate_synthetic_dossier
 logger = get_logger(__name__)
 
 
+# Risk at/above which a vehicle is escalated to a critical alert regardless of
+# which individual document triggered it.
+CRITICAL_RISK_THRESHOLD = 80
+
+# Enforcement outcome taxonomy — the high-level, operator-facing decision.
+# Distinct from `enforcement_action` (the internal severity ladder): the
+# outcome is what the UI shows and what gates automatic challan issuance. The
+# key rule: a clean but unregistered vehicle is sent to MANUAL_REVIEW, never
+# auto-fined — its identity is unverified.
+OUTCOME_CLEAR = "CLEAR"
+OUTCOME_WARNING = "WARNING"
+OUTCOME_MANUAL_REVIEW = "MANUAL_REVIEW"
+OUTCOME_CHALLAN = "CHALLAN"
+OUTCOME_CRITICAL_ALERT = "CRITICAL_ALERT"
+
+# Outcomes that justify an automatic challan.
+CHALLANABLE_OUTCOMES = (OUTCOME_CHALLAN, OUTCOME_CRITICAL_ALERT)
+
+
 # ── Public dataclasses ───────────────────────────────────────────────
 
 
@@ -85,6 +104,12 @@ class ComplianceReport:
     # Frontend can render a small "Synthetic intel" pill, analytics can
     # split real-registry signals from generated ones.
     is_synthetic: bool = False
+    # High-level enforcement decision (see OUTCOME_* constants) plus a plain
+    # explanation an operator/examiner can read. Auto-challan is gated on this,
+    # NOT on the raw risk score — so a clean unregistered vehicle routes to
+    # manual verification instead of being auto-fined.
+    enforcement_outcome: str = OUTCOME_CLEAR
+    enforcement_reason: str = ""
 
     def as_dict(self) -> dict:
         return {
@@ -108,6 +133,8 @@ class ComplianceReport:
             },
             "owner": self.owner.as_dict(),
             "is_synthetic": self.is_synthetic,
+            "enforcement_outcome": self.enforcement_outcome,
+            "enforcement_reason": self.enforcement_reason,
         }
 
 
@@ -161,6 +188,74 @@ def _expiry_check(label: str, expiry: Optional[date], today: date) -> CheckResul
             detail=f"{label} expires in {days_left} day(s)",
         )
     return CheckResult(status="VALID", expiry=expiry, detail=f"{label} valid for {days_left} more day(s)")
+
+
+# ── Enforcement decision ────────────────────────────────────────────
+
+
+def _decide_enforcement(
+    *,
+    vehicle_known: bool,
+    is_synthetic: bool,
+    risk_score: int,
+    registration: CheckResult,
+    insurance: CheckResult,
+    puc: CheckResult,
+    blacklist: CheckResult,
+    open_violations: int,
+) -> tuple[str, str]:
+    """Map compliance facts → (outcome, human-readable reason).
+
+    Precedence, most severe first:
+      CRITICAL_ALERT  watchlist hit, or risk >= CRITICAL_RISK_THRESHOLD
+      CHALLAN         registration or insurance expired (fineable offence)
+      WARNING         PUC expired, any document expiring soon, outstanding fines
+      MANUAL_REVIEW   unregistered/synthetic vehicle that is otherwise clean
+      CLEAR           known vehicle, all documents valid
+
+    Only CRITICAL_ALERT and CHALLAN justify an automatic challan. A clean but
+    unregistered vehicle is never auto-fined — its identity is unverified, so
+    it routes to manual verification.
+    """
+    reg_expired = registration.status == "EXPIRED"
+    ins_expired = insurance.status == "EXPIRED"
+    flagged = blacklist.status == "FLAGGED"
+
+    if flagged:
+        return OUTCOME_CRITICAL_ALERT, f"Watchlist hit — {blacklist.detail or 'vehicle flagged'}"
+    if risk_score >= CRITICAL_RISK_THRESHOLD:
+        drivers = [d for d, on in (
+            ("registration expired", reg_expired),
+            ("insurance expired", ins_expired),
+        ) if on] or ["multiple compliance failures"]
+        return OUTCOME_CRITICAL_ALERT, f"Critical risk {risk_score}/100 — {', '.join(drivers)}"
+
+    if reg_expired or ins_expired:
+        parts = []
+        if reg_expired:
+            parts.append(registration.detail or "registration expired")
+        if ins_expired:
+            parts.append(insurance.detail or "insurance expired")
+        return OUTCOME_CHALLAN, "; ".join(parts)
+
+    warnings: list[str] = []
+    if puc.status == "EXPIRED":
+        warnings.append(puc.detail or "PUC certificate expired")
+    for label, chk in (("Registration", registration), ("Insurance", insurance), ("PUC", puc)):
+        if chk.status == "EXPIRING_SOON":
+            warnings.append(chk.detail or f"{label} expiring soon")
+    if open_violations > 0:
+        warnings.append(f"{open_violations} outstanding challan(s) on record")
+    if warnings:
+        return OUTCOME_WARNING, "; ".join(warnings)
+
+    if is_synthetic or not vehicle_known:
+        return (
+            OUTCOME_MANUAL_REVIEW,
+            "Plate not found in registry — manual verification required before any enforcement action",
+        )
+
+    return OUTCOME_CLEAR, "All documents valid; no enforcement action required"
 
 
 # ── Risk scoring ────────────────────────────────────────────────────
@@ -239,6 +334,17 @@ def _compose(
         "PASS"
     )
 
+    outcome, reason = _decide_enforcement(
+        vehicle_known=True,
+        is_synthetic=False,
+        risk_score=score,
+        registration=registration,
+        insurance=insurance,
+        puc=puc,
+        blacklist=blacklist,
+        open_violations=open_violations,
+    )
+
     return ComplianceReport(
         plate=plate,
         vehicle_known=True,
@@ -263,6 +369,8 @@ def _compose(
             city=owner.city if owner else None,
             state=owner.state if owner else None,
         ),
+        enforcement_outcome=outcome,
+        enforcement_reason=reason,
     )
 
 
@@ -324,7 +432,13 @@ def _compose_from_synthetic(
     else:
         blacklist = CheckResult(status="CLEAR", detail="No active watchlist record")
 
-    score = 0
+    # Unregistered-but-clean vehicles are NOT auto-escalated. The only baseline
+    # contribution is a small "not in registry" uncertainty; the real document
+    # failures below drive the score exactly as they do on the registry path.
+    # (Previously this base was 55, which forced every unknown plate to HIGH →
+    # auto-challan — unrealistic. The MANUAL_REVIEW outcome now handles the
+    # "unverified identity" concern instead.)
+    score = 12
     if dossier.blacklist_flagged:
         score += 55
     if registration.status == "EXPIRED":
@@ -360,6 +474,17 @@ def _compose_from_synthetic(
         "PASS"
     )
 
+    outcome, reason = _decide_enforcement(
+        vehicle_known=False,
+        is_synthetic=True,
+        risk_score=score,
+        registration=registration,
+        insurance=insurance,
+        puc=puc,
+        blacklist=blacklist,
+        open_violations=open_violations,
+    )
+
     return ComplianceReport(
         plate=plate,
         # vehicle_known stays False — analytics relies on this flag to
@@ -388,6 +513,8 @@ def _compose_from_synthetic(
             state=dossier.owner_state,
         ),
         is_synthetic=True,
+        enforcement_outcome=outcome,
+        enforcement_reason=reason,
     )
 
 

@@ -68,7 +68,16 @@ from app.models.camera import Camera
 from app.models.detection import Detection
 from app.models.challan import Challan
 from app.models.vehicle import Vehicle
-from app.services.compliance_engine import ComplianceReport, assess_compliance
+from app.services.compliance_engine import (
+    ComplianceReport,
+    assess_compliance,
+    CHALLANABLE_OUTCOMES,
+    OUTCOME_CLEAR,
+    OUTCOME_WARNING,
+    OUTCOME_MANUAL_REVIEW,
+    OUTCOME_CHALLAN,
+    OUTCOME_CRITICAL_ALERT,
+)
 from app.services.stream_manager import StreamSource, stream_registry
 from app.websockets.manager import ws_manager
 from sqlalchemy import select
@@ -85,6 +94,7 @@ OCR_STABLE_FRAMES = 2             # OCR a track this many stable frames before l
 OCR_RELOCK_AFTER_S = 25.0         # re-OCR a long-lived track every N seconds (handles plate change/clarity)
 DEDUPE_WINDOW_S = 90              # within this window, same plate from same camera = 1 detection
 MAX_RECENT_PLATES_CACHE = 256     # LRU bound on the dedupe cache
+FALLBACK_COOLDOWN_S = 0.6         # min seconds between handheld-plate full-frame OCR scans
 ENFORCEMENT_FINE_MAP = {
     "IMPOUND_RECOMMENDED": 10000,
     "CITATE_AND_FLAG": 5000,
@@ -571,6 +581,69 @@ async def _pipeline_tick(
             track.locked_plate = ocr_text
             track.locked_quality = ocr_quality
 
+    # ── Handheld-plate fallback ──────────────────────────────
+    # If YOLO found NO vehicle this frame, the operator may be holding a
+    # plate directly to the camera (printed paper / phone screen / cropped
+    # image). Scan candidate ROIs for a plate. Throttled by FALLBACK_COOLDOWN_S
+    # so we don't OCR the full frame on every tick.
+    fallback_det: Optional[DetectionResult] = None
+    if (not ocr_reliable) and (not detections):
+        last_fb = state.get("last_fallback_at", 0.0)
+        if (now - last_fb) >= FALLBACK_COOLDOWN_S:
+            state["last_fallback_at"] = now
+            t_fb = time.perf_counter()
+            try:
+                (fb_text, fb_conf, fb_engine, fb_quality, fb_reliable,
+                 fb_crop, fb_bbox) = await _ocr_handheld_fallback(frame)
+            except Exception as exc:
+                handle.stats.last_error = f"fallback: {exc}"
+                logger.error("demo_fallback_ocr_failed", camera_id=camera_id, error=str(exc))
+                fb_text, fb_conf, fb_engine, fb_quality, fb_reliable, fb_crop, fb_bbox = (
+                    None, 0.0, None, 0.0, False, None, None)
+            handle.stats.last_ocr_ms = round((time.perf_counter() - t_fb) * 1000, 1)
+            handle.stats.ocr_attempts += 1
+
+            logger.info(
+                "demo_handheld_ocr_attempt",
+                camera_id=camera_id, text=fb_text,
+                confidence=round(fb_conf, 3), quality=round(fb_quality, 3),
+                engine=fb_engine, reliable=fb_reliable,
+            )
+
+            with contextlib.suppress(Exception):
+                await _broadcast(camera_id, {
+                    "type": "ocr_attempt",
+                    "camera_id": camera_id,
+                    "track_id": 0,
+                    "mode": "handheld",
+                    "text": fb_text or None,
+                    "confidence": round(fb_conf, 3) if fb_conf else 0.0,
+                    "quality_score": round(fb_quality, 3) if fb_quality else 0.0,
+                    "engine": fb_engine,
+                    "reliable": fb_reliable,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                })
+
+            if fb_reliable and fb_text and fb_bbox is not None:
+                ocr_text, ocr_conf, ocr_engine, ocr_quality, ocr_reliable, plate_crop = (
+                    fb_text, fb_conf, fb_engine, fb_quality, True, fb_crop)
+                handle.stats.ocr_reliable += 1
+                # Synthesize a detection so the downstream persist/broadcast
+                # path treats the handheld plate like any vehicle detection.
+                fallback_det = DetectionResult(
+                    bbox=fb_bbox, confidence=0.0, class_name="plate", class_id=-1,
+                    plate_bbox=fb_bbox, plate_confidence=fb_conf,
+                )
+                # Include in detections so the live overlay draws the box.
+                detections = [fallback_det]
+
+    # The detection backing this frame's read — a real vehicle track OR the
+    # synthesized handheld-plate detection.
+    dominant_det: Optional[DetectionResult] = (
+        track_to_ocr[1] if track_to_ocr else fallback_det
+    )
+    plate_conf_val = dominant_det.plate_confidence if dominant_det else 0.0
+
     # ── Compliance + persistence (only when we have a reliable plate) ──
     compliance: Optional[ComplianceReport] = None
     detection_id: Optional[uuid.UUID] = None
@@ -603,10 +676,10 @@ async def _pipeline_tick(
                     camera_id_str=camera_id,
                     frame_w=width,
                     frame_h=height,
-                    dominant=track_to_ocr[1],
+                    dominant=dominant_det,
                     plate=ocr_text,
                     ocr_conf=ocr_conf,
-                    plate_conf=track_to_ocr[1].plate_confidence,
+                    plate_conf=plate_conf_val,
                     compliance=compliance,
                     processing_ms=int(handle.stats.last_yolo_ms + handle.stats.last_ocr_ms),
                 )
@@ -644,7 +717,7 @@ async def _pipeline_tick(
         tracks=pairs,
         ocr_text=ocr_text if ocr_reliable else None,
         ocr_conf=ocr_conf if ocr_reliable else 0.0,
-        plate_conf=(track_to_ocr[1].plate_confidence if track_to_ocr else 0.0),
+        plate_conf=plate_conf_val,
         compliance=compliance,
         processing_ms=loop_ms,
         stream_age_ms=age_ms,
@@ -712,6 +785,66 @@ async def _ocr_on_detection(
         float(result.quality_score or 0.0),
         bool(result.is_reliable),
         crop,
+    )
+
+
+async def _ocr_handheld_fallback(
+    frame: np.ndarray,
+) -> tuple[Optional[str], float, Optional[str], float, bool, Optional[np.ndarray], Optional[BoundingBox]]:
+    """OCR candidate ROIs when no vehicle was detected.
+
+    Handles a plate held directly to the camera: printed paper, a phone
+    screen, or a cropped plate image. EasyOCR localizes text within each ROI
+    itself, so we just hand it a few sensible regions (center band first,
+    then the full frame, then a tight center box) and keep the best
+    valid-format read.
+
+    Returns the same shape as `_ocr_on_detection` plus the matched bbox in
+    frame coordinates (so the caller can synthesize a DetectionResult).
+    """
+    h, w = frame.shape[:2]
+    if h == 0 or w == 0:
+        return None, 0.0, None, 0.0, False, None, None
+
+    # Candidate ROIs, most-likely-first. Plates are wide, usually centered.
+    candidates: list[tuple[int, int, int, int]] = [
+        (int(w * 0.08), int(h * 0.22), int(w * 0.92), int(h * 0.78)),  # center band
+        (0, 0, w, h),                                                   # full frame
+        (int(w * 0.22), int(h * 0.35), int(w * 0.78), int(h * 0.65)),   # tight center
+    ]
+
+    best: Optional[tuple] = None  # (result, bbox, crop)
+    for (cx1, cy1, cx2, cy2) in candidates:
+        crop = frame[cy1:cy2, cx1:cx2]
+        if crop.size == 0:
+            continue
+        try:
+            prepped = await asyncio.to_thread(preprocess_plate_crop, crop)
+            result = await asyncio.to_thread(plate_ocr.read_plate, prepped)
+        except Exception as exc:
+            logger.error("demo_handheld_ocr_exception", error=str(exc))
+            continue
+        if not result.text:
+            continue
+        bbox = BoundingBox(x1=cx1, y1=cy1, x2=cx2, y2=cy2)
+        if best is None or result.quality_score > best[0].quality_score:
+            best = (result, bbox, crop)
+        # Strong valid read — stop scanning further ROIs.
+        if result.is_valid_format and result.is_reliable:
+            break
+
+    if best is None:
+        return None, 0.0, None, 0.0, False, None, None
+
+    result, bbox, crop = best
+    return (
+        result.text or None,
+        float(result.confidence or 0.0),
+        result.engine_used,
+        float(result.quality_score or 0.0),
+        bool(result.is_reliable),
+        crop,
+        bbox,
     )
 
 
@@ -802,7 +935,12 @@ async def _broadcast(camera_id: str, payload: dict) -> None:
         if pr.get("is_duplicate"):
             return
         compliance = pr.get("compliance") or {}
-        violation = compliance.get("risk_score", 0) >= 30
+        outcome = compliance.get("enforcement_outcome", OUTCOME_CLEAR)
+        violation_label = _violation_label(compliance)
+        # Only genuine enforcement actions count as violations on the global
+        # feed — a clean unregistered vehicle (MANUAL_REVIEW) or an advisory
+        # (WARNING) is NOT a violation.
+        is_violation = outcome in CHALLANABLE_OUTCOMES
         global_payload = {
             "type": "detection",
             "id": pr.get("id") or str(uuid.uuid4()),
@@ -814,8 +952,10 @@ async def _broadcast(camera_id: str, payload: dict) -> None:
             "ocr_confidence": pr.get("ocr_confidence"),
             "vehicle_confidence": (payload["detections"][0]["confidence"] if payload["detections"] else None),
             "plate_confidence": pr.get("plate_confidence"),
-            "is_violation": violation,
-            "violation_type": _violation_label(compliance),
+            "is_violation": is_violation,
+            "violation_type": violation_label or _humanize_outcome(outcome),
+            "enforcement_outcome": outcome,
+            "enforcement_reason": compliance.get("enforcement_reason"),
             "processing_time_ms": int(payload["telemetry"].get("pipeline_ms") or 0),
             "bounding_box": (
                 _bbox_dict(payload["detections"][0]["bbox"]) if payload["detections"] else None
@@ -825,7 +965,8 @@ async def _broadcast(camera_id: str, payload: dict) -> None:
             "timestamp": payload["timestamp"],
         }
         await ws_manager.broadcast_to_room("global:detections", global_payload)
-        if violation:
+        # Reserve the alerts channel for the highest-severity events.
+        if outcome == OUTCOME_CRITICAL_ALERT:
             await ws_manager.broadcast_to_room("global:alerts", global_payload)
 
 
@@ -834,6 +975,10 @@ def _bbox_dict(arr: list[int]) -> dict:
 
 
 def _violation_label(compliance: dict) -> Optional[str]:
+    # Specific document/watchlist violations take precedence over the generic
+    # "unregistered" label, so a synthetic vehicle with expired insurance reads
+    # as "Expired Insurance" (the actionable fact) rather than a bare
+    # "Unregistered Vehicle".
     if compliance.get("blacklist", {}).get("status") == "FLAGGED":
         return "Blacklisted Vehicle"
     for key, label in (
@@ -845,7 +990,19 @@ def _violation_label(compliance: dict) -> Optional[str]:
             return label
     if compliance.get("open_violations", 0) > 0:
         return "Outstanding Fines"
+    if not compliance.get("vehicle_known", True):
+        return "Unregistered Vehicle"
     return None
+
+
+def _humanize_outcome(outcome: str) -> str:
+    return {
+        OUTCOME_CRITICAL_ALERT: "Critical Alert",
+        OUTCOME_CHALLAN: "Challan Issued",
+        OUTCOME_MANUAL_REVIEW: "Manual Verification Required",
+        OUTCOME_WARNING: "Advisory Warning",
+        OUTCOME_CLEAR: "Clear",
+    }.get(outcome, outcome)
 
 
 # ── Persistence + evidence ───────────────────────────────────────────
@@ -892,9 +1049,23 @@ async def _persist_detection(
                     "x2": dominant.plate_bbox.x2, "y2": dominant.plate_bbox.y2,
                 }
 
-        violation_label = _violation_label(compliance.as_dict())
-        if not compliance.vehicle_known:
-            violation_label = "Unregistered Vehicle"
+        # Derive the persisted violation fields from the enforcement OUTCOME,
+        # not the raw risk score. Manual-review / warning / clear are NOT
+        # violations — only challan / critical-alert are.
+        outcome = compliance.enforcement_outcome
+        specific_label = _violation_label(compliance.as_dict())
+        if outcome in CHALLANABLE_OUTCOMES:
+            is_violation = True
+            violation_label = specific_label or _humanize_outcome(outcome)
+        elif outcome == OUTCOME_MANUAL_REVIEW:
+            is_violation = False
+            violation_label = "Manual Verification Required"
+        elif outcome == OUTCOME_WARNING:
+            is_violation = False
+            violation_label = specific_label or "Advisory Warning"
+        else:  # OUTCOME_CLEAR
+            is_violation = False
+            violation_label = None
 
         det = Detection(
             camera_id=cam_uuid,
@@ -909,7 +1080,7 @@ async def _persist_detection(
             plate_bounding_box=plate_bbox_json,
             timestamp=datetime.utcnow(),
             status=DetectionStatus.PROCESSED,
-            is_violation=bool(violation_label),
+            is_violation=is_violation,
             violation_type=violation_label,
             processing_time_ms=processing_ms,
         )
@@ -917,8 +1088,11 @@ async def _persist_detection(
         await session.flush()
         await session.refresh(det)
 
-        if compliance.risk_score >= 55:
-            # Issue a challan. Three paths:
+        if outcome in CHALLANABLE_OUTCOMES:
+            # Issue a challan ONLY for challan-worthy outcomes (registration /
+            # insurance expired, watchlist hit, or critical risk). Clean
+            # unregistered vehicles fall through to manual verification below.
+            # Three owner paths:
             #   1. Known DB vehicle  → use real owner record.
             #   2. Synthetic dossier → use the AI-generated owner (still
             #      believable, tagged as synthetic via violation_description).
@@ -979,8 +1153,8 @@ async def _persist_detection(
                 detection_id=det.id,
                 violation_type=challan_violation_type,
                 violation_description=(
-                    f"AI auto-issued ({compliance.enforcement_action}, "
-                    f"risk {compliance.risk_score}/100){desc_suffix}"
+                    f"AI {outcome}: {compliance.enforcement_reason} "
+                    f"(risk {compliance.risk_score}/100){desc_suffix}"
                 ),
                 plate_number=plate,
                 fine_amount=fine,

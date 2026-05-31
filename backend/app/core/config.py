@@ -37,6 +37,14 @@ class Settings(BaseSettings):
     POSTGRES_USER: str = "enforcement_user"
     POSTGRES_PASSWORD: str = Field(..., min_length=8)
 
+    # Echo every SQL statement to the logger. Must stay False in any running
+    # system: under realtime load the synchronous log writes happen on the
+    # event-loop thread, and when the log sink (Docker driver / terminal)
+    # applies backpressure the write() syscall blocks the loop — the system
+    # soft-locks with low CPU and /health hangs. Decoupled from DEBUG on
+    # purpose so dev can keep DEBUG=true (docs, token-less WS) without the flood.
+    DB_ECHO: bool = False
+
     @property
     def database_url(self) -> str:
         return (

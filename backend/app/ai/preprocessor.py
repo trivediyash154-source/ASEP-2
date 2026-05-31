@@ -16,25 +16,49 @@ def preprocess_frame(frame: np.ndarray) -> np.ndarray:
 
 def preprocess_plate_crop(plate_crop: np.ndarray) -> np.ndarray:
     """
-    Heavy preprocessing pipeline specifically for license plate OCR.
-    Applies deskewing, sharpening, and binarization for best OCR results.
+    Light-touch preprocessing for license-plate OCR.
+
+    IMPORTANT: EasyOCR/PaddleOCR are deep recognition models trained on
+    real-world photographs. They perform DRAMATICALLY worse on classically
+    "cleaned" input (hard binarization, aggressive deskew, sharpening) — the
+    very transforms that helped Tesseract in 2015 destroy the texture cues
+    a modern model relies on.
+
+    Measured on a clean rendered plate:
+        raw crop            → EasyOCR reads "MH12AB1234" @ 0.91
+        old heavy pipeline  → EasyOCR reads "9"          @ 0.29   (broken)
+
+    So this pipeline now does the minimum that genuinely helps:
+      1. Upscale small crops so glyphs are tall enough for the detector.
+      2. A gentle CLAHE contrast lift on the luminance channel only — rescues
+         low-light / backlit plates without touching glyph geometry.
+
+    No deskew (EasyOCR is rotation-tolerant to ~15°), no sharpening, no
+    binarization. The colour image is handed to the OCR engine as-is.
     """
     if plate_crop is None or plate_crop.size == 0:
         raise ValueError("Empty plate crop received")
 
-    # Resize to standard height while preserving aspect ratio
-    plate_crop = _resize_to_standard(plate_crop, target_height=64)
+    h = plate_crop.shape[0]
+    # EasyOCR likes a glyph height of roughly 32–96px. Upscale anything
+    # shorter than 64px; leave already-large crops alone (downscaling a
+    # crisp plate only loses detail).
+    if h < 64:
+        plate_crop = _resize_to_standard(plate_crop, target_height=96)
 
-    # Deskew — plates can be tilted up to 15°
-    plate_crop = _deskew(plate_crop)
+    return _gentle_contrast(plate_crop)
 
-    # Sharpen for motion blur recovery
-    plate_crop = _sharpen(plate_crop)
 
-    # Adaptive binarization — handles uneven lighting
-    plate_crop = _binarize(plate_crop)
-
-    return plate_crop
+def _gentle_contrast(img: np.ndarray) -> np.ndarray:
+    """CLAHE on the L channel only. Preserves colour + glyph edges."""
+    if img.ndim == 2:
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        return clahe.apply(img)
+    lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+    l, a, b = cv2.split(lab)
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    l = clahe.apply(l)
+    return cv2.cvtColor(cv2.merge([l, a, b]), cv2.COLOR_LAB2BGR)
 
 
 def _normalize_exposure(frame: np.ndarray) -> np.ndarray:

@@ -1,6 +1,7 @@
 """
 AI Vehicle Expiry Enforcement System — FastAPI Application Entry Point
 """
+import asyncio
 import time
 from contextlib import asynccontextmanager
 
@@ -38,6 +39,10 @@ async def lifespan(app: FastAPI):
     if settings.APP_ENV.lower() not in ("production", "prod"):
         from scripts.bootstrap import bootstrap as _bootstrap
         await _bootstrap()
+        # bootstrap() runs alembic, whose fileConfig() resets Python logging
+        # (root → WARN per alembic.ini). Re-apply our config so every INFO log
+        # after this point (watchdog, ready, live-activity) stays visible.
+        configure_logging()
 
     # Initialize Redis
     redis_client = aioredis.from_url(
@@ -80,6 +85,10 @@ async def lifespan(app: FastAPI):
     from app.services.live_activity import start as start_live_activity
     app.state.live_activity_task = await start_live_activity()
 
+    # Start the event-loop watchdog (logs loop lag + pipeline telemetry every 5s)
+    from app.services.watchdog import start as start_watchdog
+    app.state.watchdog_task = await start_watchdog()
+
     # Verify DB connectivity
     db_healthy = await check_database_health()
     if not db_healthy:
@@ -100,6 +109,8 @@ async def lifespan(app: FastAPI):
         app.state.redis_relay.cancel()
     if hasattr(app.state, "live_activity_task"):
         app.state.live_activity_task.cancel()
+    if hasattr(app.state, "watchdog_task"):
+        app.state.watchdog_task.cancel()
     await redis_client.aclose()
     await engine.dispose()
     logger.info("enforcement_platform_shutdown_complete")
@@ -156,17 +167,39 @@ def create_application() -> FastAPI:
     uploads_dir.mkdir(parents=True, exist_ok=True)
     app.mount("/uploads", StaticFiles(directory=str(uploads_dir)), name="uploads")
 
-    # ── Health check ──────────────────────────────────────────────────────────
+    # ── Liveness ──────────────────────────────────────────────────────────────
+    # Zero-I/O probe: if this coroutine runs, the process is up AND the event
+    # loop is scheduling work. Touches no DB, Redis, camera, or model — so it
+    # responds instantly even when a dependency is hung. Use this for
+    # orchestrator liveness checks.
+    @app.get("/health/live", tags=["Health"])
+    async def liveness():
+        return {"status": "alive"}
+
+    # ── Health check (readiness) ────────────────────────────────────────────────
     @app.get("/health", tags=["Health"])
     async def health_check(request: Request):
-        db_ok = await check_database_health()
-        redis_ok = False
-        try:
-            await request.app.state.redis.ping()
-            redis_ok = True
-        except Exception:
-            pass
+        """Readiness probe. Each dependency check is wrapped in a strict
+        timeout and the two run concurrently, so a hung DB pool or slow Redis
+        can never make /health hang — it returns within ~PROBE_TIMEOUT_S.
+        No OCR/camera/model checks and no heavy queries.
+        """
+        PROBE_TIMEOUT_S = 1.5
 
+        async def _probe_db() -> bool:
+            try:
+                return await asyncio.wait_for(check_database_health(), PROBE_TIMEOUT_S)
+            except Exception:
+                return False
+
+        async def _probe_redis() -> bool:
+            try:
+                await asyncio.wait_for(request.app.state.redis.ping(), PROBE_TIMEOUT_S)
+                return True
+            except Exception:
+                return False
+
+        db_ok, redis_ok = await asyncio.gather(_probe_db(), _probe_redis())
         overall = db_ok and redis_ok
         return JSONResponse(
             status_code=status.HTTP_200_OK if overall else status.HTTP_503_SERVICE_UNAVAILABLE,
