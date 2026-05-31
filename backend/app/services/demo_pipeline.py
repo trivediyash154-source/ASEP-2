@@ -472,12 +472,19 @@ async def _pipeline_tick(
         return False
 
     frame, age_ms = source.latest_frame_with_age_ms()
-    if frame is None:
+    # The 1-slot buffer keeps serving the LAST frame after the upstream source
+    # stops, so a mid-stream drop (phone leaves Wi-Fi / screen locks) shows up as
+    # a frame that's *stale* (old age) — NOT as None. Treat both as "not alive"
+    # so the recovery overlay actually fires instead of the video silently
+    # freezing on the last frame.
+    stream_alive = frame is not None and age_ms <= (dead_stream_s * 1000.0)
+    if not stream_alive:
         stale_s = time.time() - state["last_frame_seen_at"]
         if stale_s > dead_stream_s and not state["dead_stream_announced"]:
             logger.warning(
                 "demo_pipeline_stream_dead",
                 camera_id=camera_id, stale_s=round(stale_s, 1),
+                frame_age_ms=round(age_ms, 0) if frame is not None else None,
             )
             await _broadcast(camera_id, {
                 "type": "stream_state",

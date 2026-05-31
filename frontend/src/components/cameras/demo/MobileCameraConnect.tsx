@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Apple,
@@ -91,52 +91,65 @@ type ProbeResult = {
   hint?: string | null;
 };
 
+// Remembered across sessions so the operator taps Connect once on stage.
+const LAST_SOURCE_KEY = "vaahan:lastSource";
+
 export function MobileCameraConnect({ open, cameraId, onClose, onConnected }: Props) {
   const [preset, setPreset] = useState<Preset>("ip-webcam");
   const [source, setSource] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [probing, setProbing] = useState(false);
   const [probe, setProbe] = useState<ProbeResult | null>(null);
 
   const current = PRESETS.find((p) => p.key === preset)!;
 
-  async function testConnection() {
-    if (!source.trim()) {
-      toast.error("Enter a stream source first");
-      return;
-    }
-    setProbing(true);
-    setProbe(null);
+  // Pre-fill the last source that worked on this machine — on stage you tap
+  // Connect once, no typing. Falls back to the selected preset's placeholder.
+  useEffect(() => {
+    if (!open) return;
+    let last: string | null = null;
     try {
-      const r = await apiClient.post(`/cameras/demo/probe`, {
-        source_url: source.trim(),
-      });
-      setProbe(r.data as ProbeResult);
-    } catch (err: unknown) {
-      const detail =
-        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
-        (err as Error)?.message ??
-        "Probe failed";
-      setProbe({ reachable: false, error: String(detail) });
-    } finally {
-      setProbing(false);
+      last = localStorage.getItem(LAST_SOURCE_KEY);
+    } catch {
+      /* localStorage unavailable */
     }
-  }
+    setSource(last || current.placeholder);
+    setProbe(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
-  async function submit() {
-    if (!source.trim()) {
+  // ONE button: probe, then connect on success, then remember the URL. Removes
+  // the separate Test step so there's nothing to fumble live.
+  async function connectFlow() {
+    const url = source.trim();
+    if (!url) {
       toast.error("Enter a stream source first");
       return;
     }
     setSubmitting(true);
+    setProbe(null);
     try {
-      await apiClient.post(`/cameras/demo/${cameraId}/connect`, {
-        source_url: source.trim(),
-      });
-      toast.success("Stream opened", {
-        description: "ANPR pipeline is processing frames live.",
-      });
-      onConnected(source.trim());
+      // 1) Probe — fast, gives a clear reason if it's unreachable.
+      let pr: ProbeResult | null = null;
+      try {
+        const r = await apiClient.post(`/cameras/demo/probe`, { source_url: url });
+        pr = r.data as ProbeResult;
+        setProbe(pr);
+      } catch {
+        pr = null; // probe failed to run — fall through and let /connect try anyway
+      }
+      if (pr && !pr.reachable) {
+        toast.error("Source not reachable", { description: pr.hint || pr.error || "Check Wi-Fi, port, and the /video path." });
+        return;
+      }
+      // 2) Connect.
+      await apiClient.post(`/cameras/demo/${cameraId}/connect`, { source_url: url });
+      try {
+        localStorage.setItem(LAST_SOURCE_KEY, url);
+      } catch {
+        /* ignore */
+      }
+      toast.success("Stream opened", { description: "ANPR pipeline is processing frames live." });
+      onConnected(url);
       onClose();
     } catch (err: unknown) {
       const detail =
@@ -178,8 +191,8 @@ export function MobileCameraConnect({ open, cameraId, onClose, onConnected }: Pr
                   Connect a camera feed
                 </h2>
                 <p className="mt-1 text-xs text-foreground-muted">
-                  Pick a source profile, paste its URL, then <span className="font-semibold">Test</span> it
-                  before opening the live pipeline.
+                  Your last working source is pre-filled — just hit <span className="font-semibold">Connect</span>.
+                  It probes the source, then opens the live pipeline.
                 </p>
               </div>
               <button
@@ -244,20 +257,12 @@ export function MobileCameraConnect({ open, cameraId, onClose, onConnected }: Pr
                   className="flex-1 h-10 px-3 rounded-lg border border-border bg-surface text-sm font-mono text-foreground placeholder:text-foreground-subtle/70 outline-none focus:border-sage-500 focus:ring-focus"
                 />
                 <Button
-                  onClick={testConnection}
-                  size="lg"
-                  variant="outline"
-                  loading={probing}
-                >
-                  Test
-                </Button>
-                <Button
-                  onClick={submit}
+                  onClick={connectFlow}
                   size="lg"
                   variant="primary"
                   loading={submitting}
                 >
-                  Connect
+                  {submitting ? "Connecting…" : "Connect"}
                 </Button>
               </div>
               <p className="mt-2 text-2xs text-foreground-subtle">{current.helper}</p>
