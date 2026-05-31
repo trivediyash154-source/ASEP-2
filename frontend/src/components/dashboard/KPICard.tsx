@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { TrendingDown, TrendingUp, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -168,7 +169,7 @@ export function KPICard({
             "text-2xl font-display font-semibold tracking-tight tabular-nums leading-none mb-1",
             v.value
           )}>
-            {value}
+            {typeof value === "number" ? <CountUpNumber value={value} /> : value}
           </p>
 
           {/* Subtitle */}
@@ -207,4 +208,41 @@ export function KPICard({
       </div>
     </motion.div>
   );
+}
+
+/**
+ * Counts the displayed value up to its target on mount and whenever it changes.
+ * Numeric KPI tiles "tick up" like a live ops dashboard; respects reduced-motion.
+ */
+function CountUpNumber({ value, duration = 750 }: { value: number; duration?: number }) {
+  const [n, setN] = useState(value);
+  const prev = useRef(value);
+
+  useEffect(() => {
+    const reduce =
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const from = prev.current;
+    if (reduce || from === value) {
+      setN(value);
+      prev.current = value;
+      return;
+    }
+    let raf = 0;
+    const start = performance.now();
+    const tick = (t: number) => {
+      const p = Math.min(1, (t - start) / duration);
+      const eased = 1 - Math.pow(1 - p, 3);
+      setN(Math.round(from + (value - from) * eased));
+      if (p < 1) {
+        raf = requestAnimationFrame(tick);
+      } else {
+        prev.current = value;
+      }
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [value, duration]);
+
+  return <>{n.toLocaleString("en-IN")}</>;
 }
