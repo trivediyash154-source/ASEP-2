@@ -45,6 +45,7 @@ import {
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
 import { formatDistanceToNowStrict } from "date-fns";
+import { OPEN_PALETTE_EVENT } from "@/components/shared/CommandPalette";
 
 interface TopBarProps {
   title: string;
@@ -471,7 +472,7 @@ function HelpPanel({ onClose }: { onClose: () => void }) {
 
       <div className="px-5 py-2.5 border-t border-border bg-muted/30">
         <p className="text-2xs text-foreground-subtle font-mono text-center uppercase tracking-[0.1em]">
-          VAAHAN AI · Maharashtra Traffic Enforcement
+          VAAHAN AI · Pune Regional Surveillance Network
         </p>
       </div>
     </motion.div>
@@ -537,17 +538,21 @@ export function TopBar({ title, subtitle, eyebrow, actions }: TopBarProps) {
         {/* Right cluster */}
         <div className="flex items-center gap-1.5">
 
-          {/* Search */}
-          <div className="hidden lg:flex items-center gap-2 h-9 w-64 px-3 rounded-lg
-                          bg-surface border border-border hover:border-border-strong transition-colors">
+          {/* Search → opens the global command palette */}
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new CustomEvent(OPEN_PALETTE_EVENT))}
+            className="hidden lg:flex items-center gap-2 h-9 w-64 px-3 rounded-lg
+                       bg-surface border border-border hover:border-border-strong transition-colors
+                       text-left cursor-pointer group"
+            aria-label="Open command palette"
+          >
             <Search className="h-3.5 w-3.5 text-foreground-subtle shrink-0" />
-            <input
-              type="text"
-              placeholder="Search plates, challans…"
-              className="flex-1 bg-transparent text-sm text-foreground placeholder:text-foreground-subtle/60 outline-none"
-            />
+            <span className="flex-1 text-sm text-foreground-subtle/70 group-hover:text-foreground-subtle truncate">
+              Jump to… plates, pages
+            </span>
             <Kbd>⌘K</Kbd>
-          </div>
+          </button>
 
           {/* Live status */}
           <div className={cn(

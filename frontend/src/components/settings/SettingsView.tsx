@@ -95,12 +95,12 @@ export function SettingsView() {
 
   function handleChange(key: string, value: string) {
     setLocal((prev) => ({ ...prev, [key]: value }));
-    setDirty((prev) => new Set([...prev, key]));
+    setDirty((prev) => new Set(Array.from(prev).concat(key)));
   }
 
   function handleSave() {
     const changed: Record<string, string> = {};
-    for (const key of dirty) {
+    for (const key of Array.from(dirty)) {
       changed[key] = local[key];
     }
     saveMut.mutate(changed);

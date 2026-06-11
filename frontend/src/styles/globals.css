@@ -62,6 +62,39 @@
     --threat-critical: 0 60% 48%;
   }
 
+  /* ── Light token scope — pins light values under a dark <html>.
+        Used by the auth route, whose art direction is light-only. ── */
+  .theme-light-scope {
+    --background: 40 22% 97%;
+    --surface: 0 0% 100%;
+    --surface-elevated: 0 0% 100%;
+    --surface-sunken: 40 18% 95%;
+    --foreground: 60 6% 10%;
+    --foreground-muted: 50 5% 36%;
+    --foreground-subtle: 40 5% 49%;
+    --card: 0 0% 100%;
+    --card-foreground: 60 6% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 60 6% 10%;
+    --primary: 90 7% 40%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 79 17% 64%;
+    --secondary-foreground: 90 12% 18%;
+    --accent: 17 76% 71%;
+    --accent-foreground: 22 50% 18%;
+    --highlight: 25 41% 54%;
+    --highlight-foreground: 0 0% 100%;
+    --muted: 40 14% 94%;
+    --muted-foreground: 50 5% 36%;
+    --destructive: 0 35% 53%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 45 12% 88%;
+    --border-strong: 45 10% 78%;
+    --input: 45 12% 88%;
+    --ring: 90 12% 42%;
+    color: hsl(var(--foreground));
+  }
+
   /* ── CINEMATIC GOVERNMENT DARK ─────────────────────────────── */
   .dark {
     --background: 35 14% 8%;            /* #141210 deep warm charcoal */
@@ -124,10 +157,26 @@
       radial-gradient(rgba(101, 70, 41, 0.018) 1px, transparent 1px);
     background-size: 22px 22px;
   }
-  .dark body, .dark {
+  /* Cinematic dark atmosphere — layered ambient glows + grain + vignette.
+     Fixed attachment keeps the light sources stable while content scrolls. */
+  .dark body {
     background-image:
-      radial-gradient(rgba(200, 180, 140, 0.02) 1px, transparent 1px);
+      radial-gradient(ellipse 900px 600px at 12% -8%, rgba(127, 136, 118, 0.10), transparent 60%),
+      radial-gradient(ellipse 800px 520px at 105% 12%, rgba(189, 134, 88, 0.06), transparent 55%),
+      radial-gradient(ellipse 1100px 700px at 50% 115%, rgba(237, 159, 126, 0.045), transparent 60%),
+      radial-gradient(rgba(200, 180, 140, 0.022) 1px, transparent 1px);
+    background-size: 100% 100%, 100% 100%, 100% 100%, 22px 22px;
+    background-attachment: fixed, fixed, fixed, scroll;
   }
+  .dark body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    box-shadow: inset 0 0 220px 40px rgba(8, 7, 6, 0.55);
+  }
+  .dark body > * { position: relative; z-index: 1; }
 
   ::selection {
     background: rgba(237, 159, 126, 0.32);
@@ -157,6 +206,16 @@
 }
 ::-webkit-scrollbar-thumb:hover { background: hsl(45 6% 64% / 0.7); background-clip: padding-box; border: 2px solid hsl(var(--background)); }
 ::-webkit-scrollbar-corner { background: transparent; }
+.dark ::-webkit-scrollbar-thumb {
+  background: hsl(35 8% 26% / 0.85);
+  border: 2px solid hsl(var(--background));
+  background-clip: padding-box;
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: hsl(35 8% 36% / 0.9);
+  border: 2px solid hsl(var(--background));
+  background-clip: padding-box;
+}
 
 /* ════════════════════════════════════════════════════════════════
    COMPONENT PRIMITIVES
@@ -207,11 +266,26 @@
       inset 0 1px 0 rgba(255,255,255,0.5);
   }
   .dark .op-surface {
+    background: linear-gradient(180deg, hsl(35 12% 12.5%) 0%, hsl(35 12% 10.5%) 100%);
+    border-color: hsl(35 10% 21%);
     box-shadow:
-      0 1px 2px rgba(0, 0, 0, 0.25),
-      0 4px 16px rgba(0, 0, 0, 0.2),
-      inset 0 1px 0 rgba(255,255,255,0.04);
+      0 1px 2px rgba(0, 0, 0, 0.35),
+      0 8px 28px -6px rgba(0, 0, 0, 0.45),
+      inset 0 1px 0 rgba(255, 255, 255, 0.045);
   }
+  .dark .surface-panel,
+  .dark .surface-panel-elevated {
+    background: linear-gradient(180deg, hsl(35 12% 12.5%) 0%, hsl(35 12% 10.5%) 100%);
+    box-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.35),
+      0 8px 28px -6px rgba(0, 0, 0, 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
+
+  /* Numeric presence — instrument values get a faint phosphor glow in dark */
+  .dark .data-value { text-shadow: 0 0 18px rgba(169, 179, 148, 0.18); }
+  .dark .readout-alert .data-value,
+  .dark .readout-critical .data-value { text-shadow: 0 0 18px rgba(237, 159, 126, 0.28); }
 
   /* ── Hairline dividers ────────────────────────────────────────── */
   .hairline       { @apply border-t border-border/80; }
@@ -295,6 +369,45 @@
       linear-gradient(90deg, rgba(169,179,148,0.04) 1px, transparent 1px);
     background-size: 32px 32px;
   }
+
+  /* ── Console panel chrome — shared by every operational surface ── */
+  .ops-header {
+    @apply flex flex-wrap items-center justify-between gap-3 px-5 py-3 border-b border-border;
+  }
+  .ops-title {
+    @apply flex items-center gap-2 font-mono text-2xs font-semibold uppercase tracking-[0.16em] text-foreground-muted;
+  }
+  .ops-title::before {
+    content: "";
+    @apply inline-block h-3 w-[3px] rounded-full bg-sage-500;
+  }
+  .ops-meta {
+    @apply font-mono text-2xs uppercase tracking-[0.12em] text-foreground-subtle tabular-nums;
+  }
+
+  /* ── Instrument readout strip (replaces KPI card grids) ───────── */
+  .readout-cell {
+    @apply relative px-5 py-4 min-w-0;
+  }
+  .readout-cell::after {
+    content: "";
+    @apply absolute bottom-0 left-5 right-5 h-[2px] rounded-full bg-transparent;
+  }
+  .readout-ok::after       { background: hsl(var(--threat-clear) / 0.55); }
+  .readout-info::after     { background: theme(colors.sage.400 / 60%); }
+  .readout-warn::after     { background: hsl(var(--threat-medium) / 0.6); }
+  .readout-alert::after    { background: hsl(var(--threat-high) / 0.65); }
+  .readout-critical::after { background: hsl(var(--threat-critical) / 0.7); }
+
+  /* ── Severity rail — left edge of queue rows ──────────────────── */
+  .severity-rail {
+    @apply absolute left-0 top-0 bottom-0 w-[3px];
+  }
+  .severity-rail-clear    { @apply severity-rail; background: hsl(var(--threat-clear) / 0.8); }
+  .severity-rail-low      { @apply severity-rail; background: hsl(var(--threat-low) / 0.8); }
+  .severity-rail-medium   { @apply severity-rail; background: hsl(var(--threat-medium) / 0.85); }
+  .severity-rail-high     { @apply severity-rail; background: hsl(var(--threat-high) / 0.9); }
+  .severity-rail-critical { @apply severity-rail; background: hsl(var(--threat-critical) / 0.95); animation: pulseSoft 2.4s ease-in-out infinite; }
 
   /* ── Glassmorphism ────────────────────────────────────────────── */
   .glass-warm {
@@ -405,6 +518,19 @@
   .status-dot-warning { @apply status-dot bg-status-warning; }
   .status-dot-error   { @apply status-dot bg-status-danger; }
   .status-dot-idle    { @apply status-dot bg-stone-400; }
+  /* Dark overrides for the legacy primitives above */
+  .dark .btn-secondary { @apply hover:bg-stone-800; }
+  .dark .btn-ghost     { @apply hover:bg-stone-800; }
+  .dark .btn-icon      { @apply hover:bg-stone-800; }
+  .dark .badge-active  { @apply bg-sage-900/40 text-sage-300 border-sage-700/50; }
+  .dark .badge-warning { @apply bg-bronze-900/30 text-bronze-300 border-bronze-700/50; }
+  .dark .badge-error   { background: hsl(0 40% 20% / 0.4); color: hsl(0 55% 72%); border-color: hsl(0 35% 34%); }
+  .dark .badge-info    { background: hsl(210 25% 22% / 0.5); color: hsl(210 35% 72%); border-color: hsl(210 20% 34%); }
+  .dark .badge-neutral { @apply bg-stone-800/60; }
+  .dark .badge-indigo  { @apply bg-sage-900/40 text-sage-300 border-sage-700/50; }
+  .dark .mono-tag      { @apply bg-stone-800 text-stone-300; }
+  .dark .progress-track{ @apply bg-stone-800; }
+
   .data-table        { @apply w-full text-sm; }
   .data-table thead tr { @apply border-b border-border; }
   .data-table thead th { @apply px-4 py-3 text-left text-2xs font-semibold uppercase tracking-[0.14em] text-foreground-subtle; }

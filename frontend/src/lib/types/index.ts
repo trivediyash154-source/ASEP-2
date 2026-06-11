@@ -60,7 +60,10 @@ export interface Detection {
   vehicle_confidence?: number;
   plate_confidence?: number;
   vehicle_category?: string;
+  /** Vehicle box in frame pixel coords: { x1, y1, x2, y2 } */
   bounding_box?: Record<string, number>;
+  /** Plate box in frame pixel coords: { x1, y1, x2, y2 } */
+  plate_bounding_box?: Record<string, number>;
   timestamp: string;
   status: DetectionStatus;
   is_violation: boolean;

@@ -156,9 +156,9 @@ function Tile({
   suffix?: string;
 }) {
   const palette = {
-    sage:   "border-sage-200 bg-sage-50/70",
-    bronze: "border-bronze-200 bg-bronze-50/70",
-    peach:  "border-peach-200 bg-peach-50/70",
+    sage:   "border-sage-200 bg-sage-50/70 dark:border-sage-700/50 dark:bg-sage-900/25",
+    bronze: "border-bronze-200 bg-bronze-50/70 dark:border-bronze-700/50 dark:bg-bronze-900/25",
+    peach:  "border-peach-200 bg-peach-50/70 dark:border-peach-700/50 dark:bg-peach-900/25",
   }[accent];
   const numColor = {
     sage:   "text-sage-900",

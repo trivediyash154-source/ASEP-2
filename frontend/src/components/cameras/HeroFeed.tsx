@@ -6,7 +6,6 @@ import {
   Compass,
   Crosshair,
   Expand,
-  Layers,
   MapPin,
   ShieldCheck,
   Volume2,
@@ -96,11 +95,11 @@ export function HeroFeed({ camera }: Props) {
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="hidden sm:inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md bg-stone-50 border border-border font-mono text-2xs text-foreground-muted">
+          <span className="hidden sm:inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md bg-stone-50 dark:bg-stone-900/60 border border-border font-mono text-2xs text-foreground-muted">
             <Compass className="h-3 w-3" />
             {camera.latitude?.toFixed(4)}°N · {camera.longitude?.toFixed(4)}°E
           </span>
-          <span className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md bg-stone-50 border border-border font-mono text-2xs text-foreground-muted">
+          <span className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md bg-stone-50 dark:bg-stone-900/60 border border-border font-mono text-2xs text-foreground-muted">
             <LiveClock />
           </span>
           <button
@@ -109,7 +108,7 @@ export function HeroFeed({ camera }: Props) {
             aria-label={audio ? "Mute alert tones" : "Enable alert tones"}
             title={audio ? "Mute alert tones" : "Enable alert tones"}
             className={cn(
-              "inline-flex items-center justify-center h-7 w-7 rounded-md border bg-surface hover:bg-stone-50 transition-colors",
+              "inline-flex items-center justify-center h-7 w-7 rounded-md border bg-surface hover:bg-stone-50 dark:hover:bg-stone-900 transition-colors",
               audio
                 ? "border-sage-400 text-sage-700 ring-1 ring-sage-200"
                 : "border-border text-foreground-muted"
@@ -162,17 +161,12 @@ export function HeroFeed({ camera }: Props) {
                 AI ANPR · YOLOv8n · EasyOCR
               </span>
             </div>
-            <div className="flex items-center gap-1.5">
-              <Layers className="h-3 w-3 text-stone-400" />
-              <span className="font-mono text-2xs tracking-[0.12em] uppercase text-stone-400">
-                Overlay v2
-              </span>
-            </div>
+            <StreamQualityHUD camera={camera} online={isOnline} lastDetectionTs={latest?.timestamp} />
           </div>
         </div>
 
         {/* Side stream */}
-        <aside className="border-t lg:border-t-0 lg:border-l border-border bg-stone-50/30 flex flex-col">
+        <aside className="border-t lg:border-t-0 lg:border-l border-border bg-stone-50/30 dark:bg-stone-900/20 flex flex-col">
           <header className="px-4 py-3 border-b border-border flex items-center justify-between">
             <p className="section-eyebrow">This camera</p>
             <span className="font-mono text-2xs text-foreground-subtle tabular-nums">
@@ -224,6 +218,52 @@ export function HeroFeed({ camera }: Props) {
         </aside>
       </div>
     </section>
+  );
+}
+
+/**
+ * Stream-quality readout pinned to the feed's bottom-right: signal
+ * strength, capture format, and time since the last AI detection.
+ */
+function StreamQualityHUD({ camera, online, lastDetectionTs }: {
+  camera: Camera;
+  online: boolean;
+  lastDetectionTs?: string;
+}) {
+  const bars = !online ? 0 : camera.error_count > 5 ? 1 : camera.error_count > 0 ? 2 : 3;
+  const res = camera.resolution_height ? `${camera.resolution_height}p` : null;
+  const fps = camera.fps ? `${camera.fps}fps` : null;
+
+  return (
+    <div className="flex items-center gap-2.5 px-2.5 h-7 rounded-md bg-stone-900/65 backdrop-blur-[2px] border border-stone-100/10 font-mono text-2xs uppercase tracking-[0.1em]">
+      <span className="flex items-center gap-1.5">
+        <span className={cn("flex items-end gap-[2px] h-3", online ? "text-sage-300" : "text-stone-500")} aria-hidden>
+          {[1, 2, 3].map((b) => (
+            <span
+              key={b}
+              className={cn(
+                "w-[2.5px] rounded-sm",
+                b === 1 ? "h-1" : b === 2 ? "h-2" : "h-3",
+                b <= bars ? "bg-current" : "bg-current opacity-20"
+              )}
+            />
+          ))}
+        </span>
+        <span className={online ? "text-stone-200" : "text-stone-500"}>
+          {online ? "SIG OK" : "NO SIG"}
+        </span>
+      </span>
+      {(res || fps) && (
+        <>
+          <span className="h-3 w-px bg-stone-100/15" />
+          <span className="text-stone-300">{[res, fps].filter(Boolean).join(" · ")}</span>
+        </>
+      )}
+      <span className="h-3 w-px bg-stone-100/15" />
+      <span className="text-stone-300">
+        DET {lastDetectionTs ? timeAgo(lastDetectionTs) : "—"}
+      </span>
+    </div>
   );
 }
 

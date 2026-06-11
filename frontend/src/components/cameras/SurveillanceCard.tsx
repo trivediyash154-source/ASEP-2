@@ -106,7 +106,7 @@ export function SurveillanceCard({
       </div>
 
       {/* ─── Chrome footer: identity + counts ─────────────── */}
-      <footer className="px-3.5 py-3 border-t border-border bg-stone-50/40">
+      <footer className="px-3.5 py-3 border-t border-border bg-stone-50/40 dark:bg-stone-900/30">
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">
             <p className="font-display text-sm font-semibold text-foreground tracking-tight truncate">

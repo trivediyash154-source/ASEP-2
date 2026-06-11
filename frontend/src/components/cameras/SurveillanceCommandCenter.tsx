@@ -13,6 +13,7 @@ import { HeroFeed } from "./HeroFeed";
 import { CameraCluster } from "./CameraCluster";
 import { IncidentRail } from "./IncidentRail";
 import { EvidenceDrawer } from "./EvidenceDrawer";
+import { EvidenceStrip } from "./EvidenceStrip";
 import { FullscreenWall } from "./FullscreenWall";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -89,12 +90,15 @@ export function SurveillanceCommandCenter() {
     return () => window.removeEventListener("keydown", handler);
   }, [list, selectCamera, selectDetection, toggleFullscreen]);
 
+  // Full-bleed operations theatre — no max-width container; the wall
+  // uses the entire floor: header / [feed+cluster | incident rail] /
+  // evidence filmstrip across the bottom.
   return (
-    <div className="page-shell page-enter space-y-6">
+    <div className="w-full px-4 sm:px-5 py-4 page-enter flex flex-col gap-4">
       <TacticalHeader cameras={list} wsConnected={wsConnected} />
 
       {isLoading ? (
-        <div className="grid grid-cols-1 xl:grid-cols-[1fr_minmax(320px,360px)] gap-6">
+        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(320px,360px)] gap-4">
           <Skeleton className="h-[560px] rounded-xl" />
           <Skeleton className="h-[560px] rounded-xl" />
         </div>
@@ -108,13 +112,16 @@ export function SurveillanceCommandCenter() {
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 xl:grid-cols-[1fr_minmax(320px,360px)] gap-6 items-start">
-          <div className="space-y-6 min-w-0">
-            <HeroFeed camera={hero} />
-            <CameraCluster cameras={list} excludeId={hero.id} />
+        <>
+          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(320px,360px)] gap-4 items-stretch">
+            <div className="space-y-4 min-w-0">
+              <HeroFeed camera={hero} />
+              <CameraCluster cameras={list} excludeId={hero.id} />
+            </div>
+            <IncidentRail />
           </div>
-          <IncidentRail />
-        </div>
+          <EvidenceStrip />
+        </>
       )}
 
       <EvidenceDrawer />

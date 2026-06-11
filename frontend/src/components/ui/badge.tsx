@@ -11,15 +11,15 @@ const badgeVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-stone-100 text-foreground border-border",
-        sage:    "bg-sage-100 text-sage-800 border-sage-200",
-        peach:   "bg-peach-50 text-peach-800 border-peach-200",
-        bronze:  "bg-bronze-50 text-bronze-800 border-bronze-200",
-        success: "bg-sage-100 text-sage-800 border-sage-200",
-        warning: "bg-bronze-50 text-bronze-800 border-bronze-200",
-        danger:  "bg-[hsl(0_45%_96%)] text-[hsl(0_40%_38%)] border-[hsl(0_45%_88%)]",
-        info:    "bg-[hsl(210_30%_96%)] text-[hsl(210_30%_32%)] border-[hsl(210_30%_88%)]",
-        neutral: "bg-stone-100 text-foreground-muted border-border",
+        default: "bg-stone-100 text-foreground border-border dark:bg-stone-800/60",
+        sage:    "bg-sage-100 text-sage-800 border-sage-200 dark:bg-sage-900/40 dark:text-sage-300 dark:border-sage-700/50",
+        peach:   "bg-peach-50 text-peach-800 border-peach-200 dark:bg-peach-900/30 dark:text-peach-300 dark:border-peach-700/50",
+        bronze:  "bg-bronze-50 text-bronze-800 border-bronze-200 dark:bg-bronze-900/30 dark:text-bronze-300 dark:border-bronze-700/50",
+        success: "bg-sage-100 text-sage-800 border-sage-200 dark:bg-sage-900/40 dark:text-sage-300 dark:border-sage-700/50",
+        warning: "bg-bronze-50 text-bronze-800 border-bronze-200 dark:bg-bronze-900/30 dark:text-bronze-300 dark:border-bronze-700/50",
+        danger:  "bg-[hsl(0_45%_96%)] text-[hsl(0_40%_38%)] border-[hsl(0_45%_88%)] dark:bg-[hsl(0_40%_20%/0.4)] dark:text-[hsl(0_55%_72%)] dark:border-[hsl(0_35%_34%)]",
+        info:    "bg-[hsl(210_30%_96%)] text-[hsl(210_30%_32%)] border-[hsl(210_30%_88%)] dark:bg-[hsl(210_25%_22%/0.5)] dark:text-[hsl(210_35%_72%)] dark:border-[hsl(210_20%_34%)]",
+        neutral: "bg-stone-100 text-foreground-muted border-border dark:bg-stone-800/60",
         outline: "bg-transparent text-foreground border-border-strong",
       },
       size: {

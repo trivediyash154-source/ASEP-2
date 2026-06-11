@@ -39,7 +39,7 @@ export function IncidentRail() {
             Live
           </Badge>
         </div>
-        <div className="mt-3 inline-flex items-center gap-1 rounded-md border border-border bg-stone-50 p-0.5">
+        <div className="mt-3 inline-flex items-center gap-1 rounded-md border border-border bg-stone-50 dark:bg-stone-900/60 p-0.5">
           <button
             type="button"
             onClick={() => setFilter("all")}
@@ -56,7 +56,7 @@ export function IncidentRail() {
             className={cn(
               "h-6 px-2.5 rounded-[5px] text-2xs font-semibold uppercase tracking-[0.12em] transition-colors",
               filter === "violations"
-                ? "bg-surface text-peach-800 shadow-xs"
+                ? "bg-surface text-peach-800 dark:text-peach-300 shadow-xs"
                 : "text-foreground-subtle hover:text-foreground"
             )}
           >
@@ -68,7 +68,7 @@ export function IncidentRail() {
       <ol className="flex-1 overflow-y-auto divide-y divide-border/60">
         {visible.length === 0 ? (
           <li className="flex flex-col items-center justify-center py-14 px-6 text-center">
-            <div className="h-10 w-10 rounded-full bg-stone-100 border border-border flex items-center justify-center text-foreground-subtle">
+            <div className="h-10 w-10 rounded-full bg-stone-100 dark:bg-stone-800 border border-border flex items-center justify-center text-foreground-subtle">
               <Radio className="h-4 w-4" />
             </div>
             <p className="mt-3 text-xs font-medium text-foreground">No incidents</p>
@@ -86,7 +86,7 @@ export function IncidentRail() {
                 animate={{ opacity: 1, x: 0, backgroundColor: "rgba(0,0,0,0)" }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-                className="px-4 sm:px-5 py-2.5 cursor-pointer hover:bg-stone-50/70 transition-colors"
+                className="px-4 sm:px-5 py-2.5 cursor-pointer hover:bg-stone-50/70 dark:hover:bg-stone-900/40 transition-colors"
                 onClick={() => {
                   selectCamera(e.camera_id);
                   select(e.id);
@@ -97,8 +97,8 @@ export function IncidentRail() {
                     className={cn(
                       "shrink-0 h-8 w-8 rounded-md flex items-center justify-center",
                       e.is_violation
-                        ? "bg-peach-100 text-peach-700 ring-1 ring-peach-200"
-                        : "bg-sage-100 text-sage-700 ring-1 ring-sage-200"
+                        ? "bg-peach-100 text-peach-700 ring-1 ring-peach-200 dark:bg-peach-900/40 dark:text-peach-300 dark:ring-peach-700/50"
+                        : "bg-sage-100 text-sage-700 ring-1 ring-sage-200 dark:bg-sage-900/40 dark:text-sage-300 dark:ring-sage-700/50"
                     )}
                   >
                     {e.is_violation ? (
@@ -111,7 +111,7 @@ export function IncidentRail() {
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="plate-chip text-[0.6875rem] py-0">{e.plate ?? "—"}</span>
                       {e.is_violation && (
-                        <span className="text-2xs font-semibold text-peach-700">
+                        <span className="text-2xs font-semibold text-peach-700 dark:text-peach-400">
                           {e.violation_type ?? "Violation"}
                         </span>
                       )}
@@ -137,7 +137,7 @@ export function IncidentRail() {
         )}
       </ol>
 
-      <footer className="px-4 sm:px-5 py-2.5 border-t border-border bg-stone-50/60 rounded-b-xl flex items-center justify-between text-2xs text-foreground-subtle font-mono">
+      <footer className="px-4 sm:px-5 py-2.5 border-t border-border bg-stone-50/60 dark:bg-stone-900/40 rounded-b-xl flex items-center justify-between text-2xs text-foreground-subtle font-mono">
         <span className="inline-flex items-center gap-1.5">
           <ShieldCheck className="h-3 w-3 text-sage-600" />
           Audit-logged

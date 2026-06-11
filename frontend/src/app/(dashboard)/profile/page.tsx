@@ -158,7 +158,7 @@ export default function ProfilePage() {
             <p className="section-eyebrow mb-3">Account details</p>
             <dl className="grid grid-cols-2 gap-3">
               <InfoCell label="Username" value={user?.username ?? "—"} mono />
-              <InfoCell label="User ID" value={user?.id?.slice(0, 8) + "..." ?? "—"} mono />
+              <InfoCell label="User ID" value={user?.id ? `${user.id.slice(0, 8)}…` : "—"} mono />
               <InfoCell label="Last login" value={user?.last_login ? new Date(user.last_login).toLocaleString("en-IN") : "—"} />
               <InfoCell label="Account created" value={user?.created_at ? new Date(user.created_at).toLocaleString("en-IN") : "—"} />
             </dl>

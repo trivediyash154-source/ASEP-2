@@ -129,7 +129,7 @@ export function PipelineDiagnosticsPanel({ cameraId, connected }: Props) {
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 text-2xs text-peach-700 bg-peach-50 border border-peach-200 rounded-lg px-3 py-2">
+        <div className="flex items-center gap-2 text-2xs text-peach-700 dark:text-peach-300 bg-peach-50 dark:bg-peach-900/25 border border-peach-200 dark:border-peach-700/50 rounded-lg px-3 py-2">
           <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
           {error}
         </div>
@@ -171,12 +171,12 @@ export function PipelineDiagnosticsPanel({ cameraId, connected }: Props) {
                 <Counter icon={<Database />} label="Evidence" value={data.pipeline.evidence_saved} />
               </div>
               {data.pipeline.last_error && (
-                <p className="mt-2 text-2xs text-peach-700 font-mono bg-peach-50 border border-peach-200 rounded px-2 py-1 break-all">
+                <p className="mt-2 text-2xs text-peach-700 dark:text-peach-300 font-mono bg-peach-50 dark:bg-peach-900/25 border border-peach-200 dark:border-peach-700/50 rounded px-2 py-1 break-all">
                   Last error: {data.pipeline.last_error}
                 </p>
               )}
               {data.pipeline.last_plate && (
-                <p className="mt-2 text-2xs text-sage-700 font-mono bg-sage-50 border border-sage-200 rounded px-2 py-1">
+                <p className="mt-2 text-2xs text-sage-700 dark:text-sage-300 font-mono bg-sage-50 dark:bg-sage-900/25 border border-sage-200 dark:border-sage-700/50 rounded px-2 py-1">
                   Last plate: <span className="font-bold">{data.pipeline.last_plate}</span>
                   {data.pipeline.last_plate_age_s !== null && (
                     <span className="text-sage-500 ml-2">{data.pipeline.last_plate_age_s}s ago</span>
@@ -196,7 +196,7 @@ export function PipelineDiagnosticsPanel({ cameraId, connected }: Props) {
                 {data.active_tracks.map((t) => (
                   <div
                     key={t.track_id}
-                    className="flex items-center gap-3 px-3 py-2 rounded-lg bg-stone-50 border border-stone-200 text-2xs font-mono"
+                    className="flex items-center gap-3 px-3 py-2 rounded-lg bg-stone-50 dark:bg-stone-900/50 border border-stone-200 dark:border-stone-700 text-2xs font-mono"
                   >
                     <span className="text-stone-500 w-6 shrink-0">#{t.track_id}</span>
                     <div className="flex-1 min-w-0">
@@ -230,7 +230,7 @@ export function PipelineDiagnosticsPanel({ cameraId, connected }: Props) {
                 {data.recent_plates.slice(-12).reverse().map((p) => (
                   <span
                     key={`${p.plate}-${p.age_s}`}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-stone-200 bg-stone-50 text-2xs font-mono text-stone-700"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-stone-200 dark:border-stone-700 bg-stone-50 dark:bg-stone-900/50 text-2xs font-mono text-stone-700 dark:text-stone-300"
                   >
                     {p.plate}
                     <span className="text-stone-400">{p.age_s}s</span>
@@ -249,7 +249,7 @@ function ModelChip({ label, loaded }: { label: string; loaded: boolean }) {
   return (
     <div className={cn(
       "flex items-center gap-2 rounded-lg border px-3 py-2",
-      loaded ? "border-sage-200 bg-sage-50" : "border-peach-200 bg-peach-50"
+      loaded ? "border-sage-200 bg-sage-50 dark:border-sage-700/50 dark:bg-sage-900/25" : "border-peach-200 bg-peach-50 dark:border-peach-700/50 dark:bg-peach-900/25"
     )}>
       {loaded
         ? <CheckCircle2 className="h-3.5 w-3.5 text-sage-700 shrink-0" />
@@ -272,7 +272,7 @@ function Counter({
   value: number;
 }) {
   return (
-    <div className="flex items-center gap-2 px-2.5 py-2 rounded-lg border border-stone-200 bg-stone-50">
+    <div className="flex items-center gap-2 px-2.5 py-2 rounded-lg border border-stone-200 dark:border-stone-700 bg-stone-50 dark:bg-stone-900/50">
       <span className="[&_svg]:h-3 [&_svg]:w-3 text-stone-400 shrink-0">{icon}</span>
       <div className="min-w-0">
         <p className="text-stone-400 uppercase tracking-[0.10em]" style={{ fontSize: "0.6rem" }}>{label}</p>

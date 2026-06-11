@@ -12,6 +12,8 @@ import { Button } from "@/components/ui/button";
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 import { useNotificationBus } from "@/lib/hooks/useNotificationBus";
 import { IncidentResponseOverlay } from "@/components/shared/incident/IncidentResponseOverlay";
+import { CommandPalette } from "@/components/shared/CommandPalette";
+import { RouteProgress } from "@/components/shared/RouteProgress";
 import { getDemoSession, sessionToUser } from "@/lib/auth/demo-session";
 
 /**
@@ -135,13 +137,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   if (!isAuthenticated && !user) return <StalledScreen onRetry={verify} />;
 
   return (
-    <div className="flex min-h-screen bg-background text-foreground">
+    // No opaque bg on this wrapper — the body owns the background so the
+    // dark atmosphere layer (ambient glows + vignette) stays visible.
+    <div className="flex min-h-screen text-foreground">
       <Sidebar />
       <main className="flex-1 min-w-0 flex flex-col overflow-x-hidden">
         <ErrorBoundary label="dashboard-view">{children}</ErrorBoundary>
       </main>
       {/* Cinematic critical-event overlay (auto-mounts on high/critical events) */}
       <IncidentResponseOverlay />
+      {/* Global ⌘K palette + route-change progress strip */}
+      <CommandPalette />
+      <RouteProgress />
     </div>
   );
 }

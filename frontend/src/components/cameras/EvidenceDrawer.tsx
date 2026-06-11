@@ -147,7 +147,7 @@ function DrawerBody({ event, detection, onClose }: DrawerBodyProps) {
           type="button"
           onClick={onClose}
           aria-label="Close evidence drawer"
-          className="inline-flex items-center justify-center h-8 w-8 rounded-md border border-border bg-surface hover:bg-stone-50 text-foreground-subtle hover:text-foreground transition-colors"
+          className="inline-flex items-center justify-center h-8 w-8 rounded-md border border-border bg-surface hover:bg-stone-50 dark:hover:bg-stone-800 text-foreground-subtle hover:text-foreground transition-colors"
         >
           <X className="h-4 w-4" />
         </button>
@@ -174,16 +174,16 @@ function DrawerBody({ event, detection, onClose }: DrawerBodyProps) {
           className={cn(
             "mx-5 mt-5 rounded-xl border p-4 flex items-start gap-3",
             violation
-              ? "bg-peach-50 border-peach-200"
-              : "bg-sage-50 border-sage-200"
+              ? "bg-peach-50 border-peach-200 dark:bg-peach-900/25 dark:border-peach-700/50"
+              : "bg-sage-50 border-sage-200 dark:bg-sage-900/25 dark:border-sage-700/50"
           )}
         >
           <div
             className={cn(
               "h-9 w-9 rounded-lg flex items-center justify-center shrink-0",
               violation
-                ? "bg-peach-200 text-peach-800"
-                : "bg-sage-200 text-sage-800"
+                ? "bg-peach-200 text-peach-800 dark:bg-peach-900/50 dark:text-peach-300"
+                : "bg-sage-200 text-sage-800 dark:bg-sage-900/50 dark:text-sage-300"
             )}
           >
             {violation ? <ShieldAlert className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />}
@@ -192,7 +192,7 @@ function DrawerBody({ event, detection, onClose }: DrawerBodyProps) {
             <p
               className={cn(
                 "font-display text-base font-semibold tracking-tight",
-                violation ? "text-peach-900" : "text-sage-900"
+                violation ? "text-peach-900 dark:text-peach-100" : "text-sage-900 dark:text-sage-100"
               )}
             >
               {violation ? (violationType ?? "Violation detected") : "Compliant pass"}
@@ -203,7 +203,7 @@ function DrawerBody({ event, detection, onClose }: DrawerBodyProps) {
                 : "All compliance checks passed."}
             </p>
             {violation && (
-              <div className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-peach-800">
+              <div className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-peach-800 dark:text-peach-300">
                 <AlertOctagon className="h-3.5 w-3.5" />
                 Auto-recommended fine · {formatCurrency(suggestedFine(violationType))}
               </div>
@@ -293,17 +293,17 @@ function DrawerBody({ event, detection, onClose }: DrawerBodyProps) {
       </div>
 
       {/* Footer actions */}
-      <footer className="px-5 py-3 border-t border-border bg-stone-50/60 flex items-center justify-between gap-2">
+      <footer className="px-5 py-3 border-t border-border bg-stone-50/60 dark:bg-stone-900/40 flex items-center justify-between gap-2">
         <a
           href={`/vehicles/${encodeURIComponent(plate)}`}
-          className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-sage-300 bg-sage-50 text-xs font-semibold text-sage-800 hover:bg-sage-100"
+          className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-sage-300 bg-sage-50 text-xs font-semibold text-sage-800 hover:bg-sage-100 dark:border-sage-700/60 dark:bg-sage-900/40 dark:text-sage-300 dark:hover:bg-sage-900/60"
         >
           <Fingerprint className="h-3 w-3" />
           Open dossier
           <ExternalLink className="h-3 w-3" />
         </a>
         <div className="flex items-center gap-2">
-          <button className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-border bg-surface text-xs font-medium text-foreground hover:bg-stone-50">
+          <button className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-border bg-surface text-xs font-medium text-foreground hover:bg-stone-50 dark:hover:bg-stone-800">
             <Download className="h-3 w-3" />
             Export packet
           </button>
@@ -395,7 +395,7 @@ function ConfidenceBar({ value }: { value?: number }) {
   const pct = Math.round(value * 100);
   return (
     <div className="mt-1.5 flex items-center gap-2.5">
-      <div className="flex-1 h-1.5 rounded-full bg-stone-100 overflow-hidden">
+      <div className="flex-1 h-1.5 rounded-full bg-stone-100 dark:bg-stone-800 overflow-hidden">
         <div
           className="h-full rounded-full bg-gradient-to-r from-sage-500 to-sage-600"
           style={{ width: `${pct}%` }}

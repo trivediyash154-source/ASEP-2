@@ -198,7 +198,7 @@ export function MobileCameraConnect({ open, cameraId, onClose, onConnected }: Pr
               <button
                 onClick={onClose}
                 aria-label="Close"
-                className="inline-flex items-center justify-center h-8 w-8 rounded-md border border-border bg-surface hover:bg-stone-50 text-foreground-subtle hover:text-foreground"
+                className="inline-flex items-center justify-center h-8 w-8 rounded-md border border-border bg-surface hover:bg-stone-50 dark:hover:bg-stone-800 text-foreground-subtle hover:text-foreground"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -217,12 +217,12 @@ export function MobileCameraConnect({ open, cameraId, onClose, onConnected }: Pr
                   className={cn(
                     "text-left rounded-xl border p-3.5 transition-colors",
                     preset === p.key
-                      ? "border-sage-500 bg-sage-50 ring-2 ring-sage-200"
-                      : "border-border bg-surface hover:border-border-strong hover:bg-stone-50"
+                      ? "border-sage-500 bg-sage-50 ring-2 ring-sage-200 dark:bg-sage-900/30 dark:ring-sage-700/50"
+                      : "border-border bg-surface hover:border-border-strong hover:bg-stone-50 dark:hover:bg-stone-800"
                   )}
                 >
                   <div className="flex items-center gap-2">
-                    <span className="h-8 w-8 rounded-md bg-sage-100 text-sage-800 ring-1 ring-sage-200 flex items-center justify-center">
+                    <span className="h-8 w-8 rounded-md bg-sage-100 text-sage-800 ring-1 ring-sage-200 dark:bg-sage-900/40 dark:text-sage-300 dark:ring-sage-700/50 flex items-center justify-center">
                       <p.icon className="h-4 w-4" />
                     </span>
                     <div className="min-w-0">

@@ -2,7 +2,6 @@
 
 import { TopBar } from "@/components/shared/layout/TopBar";
 import { CommandCenterView } from "@/components/dashboard/CommandCenterView";
-import { LiveEventRail } from "@/components/shared/event-rail/LiveEventRail";
 
 export default function DashboardPage() {
   return (
@@ -10,11 +9,8 @@ export default function DashboardPage() {
       <TopBar
         eyebrow="Operations"
         title="Command center"
-        subtitle="Real-time AI surveillance, enforcement workflows, and fleet telemetry."
+        subtitle="Live threat feed, statewide intelligence, and the enforcement queue on one screen."
       />
-      <div className="px-4 sm:px-6 pt-3">
-        <LiveEventRail />
-      </div>
       <CommandCenterView />
     </>
   );

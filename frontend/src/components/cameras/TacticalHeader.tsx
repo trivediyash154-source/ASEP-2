@@ -45,9 +45,9 @@ export function TacticalHeader({ cameras, wsConnected }: Props) {
         {/* Title block */}
         <div>
           <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 px-2 h-6 rounded-md border border-sage-300 bg-sage-100/70 text-2xs font-semibold uppercase tracking-[0.16em] text-sage-800">
+            <span className="inline-flex items-center gap-1.5 px-2 h-6 rounded-md border border-sage-300 bg-sage-100/70 text-2xs font-semibold uppercase tracking-[0.16em] text-sage-800 dark:border-sage-700/60 dark:bg-sage-900/40 dark:text-sage-300">
               <Target className="h-3 w-3" />
-              Theatre · MUM
+              Theatre · PUNE
             </span>
             <Badge variant={wsConnected ? "sage" : "danger"} withDot pulse={wsConnected} size="sm">
               {wsConnected ? "Stream connected" : "Stream offline"}
@@ -61,9 +61,9 @@ export function TacticalHeader({ cameras, wsConnected }: Props) {
             Surveillance command
           </h1>
           <p className="mt-2 text-sm text-foreground-muted max-w-2xl">
-            Live AI-mediated camera operations across the Mumbai metropolitan
-            theatre. Real-time detections, violation alerts, and forensic
-            evidence chains feed a single operations console.
+            Live AI-mediated camera operations across the Pune pilot theatre —
+            Hinjewadi to Camp, expressway to Satara Road. Real-time detections,
+            violation alerts, and forensic evidence chains feed one console.
           </p>
         </div>
 
@@ -116,15 +116,15 @@ function TacticalStat({
   icon?: React.ReactNode;
 }) {
   const toneClass = {
-    sage:    "border-sage-200   bg-sage-50/70",
-    peach:   "border-peach-200  bg-peach-50/70",
-    bronze:  "border-bronze-200 bg-bronze-50/70",
+    sage:    "border-sage-200   bg-sage-50/70   dark:border-sage-700/50   dark:bg-sage-900/30",
+    peach:   "border-peach-200  bg-peach-50/70  dark:border-peach-700/50  dark:bg-peach-900/25",
+    bronze:  "border-bronze-200 bg-bronze-50/70 dark:border-bronze-700/50 dark:bg-bronze-900/25",
     neutral: "border-border     bg-surface/70",
   }[tone];
   const accent = {
-    sage:    "text-sage-800",
-    peach:   "text-peach-800",
-    bronze:  "text-bronze-800",
+    sage:    "text-sage-800 dark:text-sage-300",
+    peach:   "text-peach-800 dark:text-peach-300",
+    bronze:  "text-bronze-800 dark:text-bronze-300",
     neutral: "text-foreground",
   }[tone];
   return (

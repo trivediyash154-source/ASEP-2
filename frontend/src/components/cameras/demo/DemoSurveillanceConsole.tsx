@@ -435,8 +435,8 @@ function OcrActivityFeed({ items }: { items: OcrAttempt[] }) {
             className={cn(
               "flex items-center gap-3 px-3 py-2 rounded-lg border text-2xs font-mono",
               a.reliable
-                ? "border-sage-200 bg-sage-50"
-                : "border-stone-200 bg-stone-50"
+                ? "border-sage-200 bg-sage-50 dark:border-sage-700/50 dark:bg-sage-900/25"
+                : "border-stone-200 bg-stone-50 dark:border-stone-700 dark:bg-stone-900/40"
             )}
           >
             {/* Result chip */}
@@ -448,9 +448,9 @@ function OcrActivityFeed({ items }: { items: OcrAttempt[] }) {
             </span>
 
             {/* Confidence bar */}
-            <div className="flex-1 h-1 rounded-full bg-stone-200 overflow-hidden">
+            <div className="flex-1 h-1 rounded-full bg-stone-200 dark:bg-stone-800 overflow-hidden">
               <div
-                className={cn("h-full rounded-full", a.reliable ? "bg-sage-400" : "bg-stone-300")}
+                className={cn("h-full rounded-full", a.reliable ? "bg-sage-400" : "bg-stone-300 dark:bg-stone-600")}
                 style={{ width: `${Math.round((a.quality_score ?? 0) * 100)}%` }}
               />
             </div>

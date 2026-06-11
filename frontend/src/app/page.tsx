@@ -1,432 +1,816 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import {
-  Activity,
-  ArrowRight,
-  Camera,
-  Database,
-  FileText,
-  Globe,
-  Lock,
-  Shield,
-  ShieldCheck,
-  TrendingUp,
-  Zap,
+  AlertTriangle, ArrowRight, Camera, Cpu, Crosshair, Database,
+  FileText, Fingerprint, FolderOpen, Layers, LayoutDashboard, Lock,
+  Radio, Scale, ShieldAlert, ShieldCheck, Workflow, Zap,
 } from "lucide-react";
 
-import { LightRaysBackground } from "@/components/landing/LightRaysBackground";
 import { cn } from "@/lib/utils";
 
-const fadeUp = (delay = 0) => ({
-  initial: { opacity: 0, y: 16 },
-  animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.55, delay, ease: [0.16, 1, 0.3, 1] },
-});
+/* ════════════════════════════════════════════════════════════════════
+   VAAHAN AI — platform introduction.
+   Art-directed permanently dark (independent of console theme): this is
+   the official face of the Pune pilot deployment, not a marketing page.
+   ════════════════════════════════════════════════════════════════════ */
+
+const reveal = {
+  initial: { opacity: 0, y: 18 },
+  whileInView: { opacity: 1, y: 0 },
+  viewport: { once: true, margin: "-80px" },
+  transition: { duration: 0.6, ease: [0.16, 1, 0.3, 1] as const },
+};
+
+/* ── Simulated pipeline reads for the hero flow ───────────────────── */
+const SIM_READS = [
+  { plate: "MH12 KT 4821", zone: "Shivajinagar · JM Rd",   status: "CLEAR",             violation: false, conf: 97 },
+  { plate: "MH14 EQ 0072", zone: "PCMC · Old Mumbai Hwy",  status: "EXPIRED INSURANCE", violation: true,  conf: 94 },
+  { plate: "MH12 AB 7790", zone: "Hinjewadi · Phase 2",    status: "CLEAR",             violation: false, conf: 91 },
+  { plate: "MH12 ZX 5544", zone: "Koregaon Park · N Main", status: "EXPIRED PUC",       violation: true,  conf: 89 },
+  { plate: "MH14 GH 2310", zone: "Wakad · Expressway Exit", status: "CLEAR",            violation: false, conf: 96 },
+];
+
+const PIPE_STAGES = [
+  { key: "capture",    label: "CAPTURE",    icon: Camera },
+  { key: "detect",     label: "DETECT",     icon: Crosshair },
+  { key: "ocr",        label: "OCR",        icon: Zap },
+  { key: "compliance", label: "COMPLIANCE", icon: Scale },
+  { key: "enforce",    label: "ENFORCE",    icon: FileText },
+];
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-stone-50 text-stone-900">
-      {/* ── Navbar ──────────────────────────────────────────── */}
-      <nav className="sticky top-0 z-50 backdrop-blur-xl bg-stone-50/80 border-b border-stone-200/60">
+    <div className="min-h-screen text-stone-300 antialiased" style={{ background: "#100e0b" }}>
+      {/* Ambient atmosphere */}
+      <div
+        aria-hidden
+        className="pointer-events-none fixed inset-0"
+        style={{
+          background:
+            "radial-gradient(ellipse 900px 600px at 15% -5%, rgba(127,136,118,0.12), transparent 60%)," +
+            "radial-gradient(ellipse 800px 500px at 100% 15%, rgba(189,134,88,0.07), transparent 55%)," +
+            "radial-gradient(ellipse 1000px 700px at 50% 110%, rgba(237,159,126,0.05), transparent 60%)",
+        }}
+      />
+
+      {/* ── Nav ─────────────────────────────────────────────────── */}
+      <nav className="sticky top-0 z-50 backdrop-blur-xl border-b border-white/[0.06]" style={{ background: "rgba(16,14,11,0.85)" }}>
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-sage-600 shadow-lg shadow-sage-600/20 ring-1 ring-sage-700/30">
-              <Shield className="h-4 w-4 text-white" />
-              <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full bg-peach-400 border-[1.5px] border-stone-50" />
+            <div className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-sage-800 ring-1 ring-sage-500/40 shadow-glow-sage">
+              <Crosshair className="h-4 w-4 text-sand-100" strokeWidth={1.75} />
+              <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full bg-peach-400 border-[1.5px] border-[#100e0b]" />
             </div>
             <div>
-              <span className="font-display text-sm font-bold text-stone-900 tracking-tight">
-                VAAHAN AI
-              </span>
-              <span className="ml-2 text-2xs text-stone-400 hidden sm:inline font-mono uppercase tracking-wider">
-                Enforcement Platform
+              <span className="font-display text-sm font-bold text-stone-100 tracking-tight">VAAHAN AI</span>
+              <span className="ml-2 text-2xs text-stone-500 hidden sm:inline font-mono uppercase tracking-[0.18em]">
+                Pune Regional Surveillance Network
               </span>
             </div>
           </div>
-          <div className="hidden md:flex items-center gap-6 text-sm text-stone-500">
-            <a href="#features" className="hover:text-stone-900 transition-colors">
-              Features
-            </a>
-            <a href="#architecture" className="hover:text-stone-900 transition-colors">
-              Architecture
-            </a>
-            <a href="#quickstart" className="hover:text-stone-900 transition-colors">
-              Quick Start
-            </a>
+          <div className="hidden md:flex items-center gap-6 font-mono text-2xs uppercase tracking-[0.14em] text-stone-500">
+            <a href="#mission" className="hover:text-stone-200 transition-colors">Mission</a>
+            <a href="#system" className="hover:text-stone-200 transition-colors">System</a>
+            <a href="#impact" className="hover:text-stone-200 transition-colors">Impact</a>
+            <a href="#architecture" className="hover:text-stone-200 transition-colors">Architecture</a>
           </div>
           <Link
             href="/login"
-            className="inline-flex items-center gap-2 bg-sage-600 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-sage-700 transition-all shadow-md shadow-sage-600/15 hover:shadow-lg hover:shadow-sage-600/25"
+            className="inline-flex items-center gap-2 bg-sage-600 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-sage-500 transition-colors ring-1 ring-sage-500/50"
           >
-            Sign In <ArrowRight className="h-3.5 w-3.5" />
+            Access Console <ArrowRight className="h-3.5 w-3.5" />
           </Link>
         </div>
       </nav>
 
-      {/* ── Hero ─────────────────────────────────────────────── */}
-      <section className="relative pt-28 pb-28 overflow-hidden">
-        <LightRaysBackground intensity="high" />
-
-        <div className="relative max-w-5xl mx-auto px-6 text-center">
-          <motion.div {...fadeUp(0)}>
-            <div className="inline-flex items-center gap-2 bg-white/70 backdrop-blur-xl border border-sage-200/70 rounded-full pl-2 pr-4 py-1.5 text-xs font-semibold text-sage-700 mb-8 shadow-[0_8px_30px_-12px_rgba(127,136,118,0.45)] ring-1 ring-white/60">
-              <span className="relative inline-flex h-5 w-5 items-center justify-center rounded-full bg-sage-600">
-                <span className="absolute inset-0 rounded-full bg-sage-500 opacity-60 animate-ping" />
-                <ShieldCheck className="relative h-3 w-3 text-white" />
-              </span>
-              Smart City AI Enforcement Infrastructure
-              <span className="text-2xs font-mono uppercase tracking-[0.16em] text-stone-400">
-                v2.6 · live
-              </span>
-            </div>
-          </motion.div>
-
-          <motion.h1
-            {...fadeUp(0.08)}
-            className="font-display text-5xl md:text-6xl lg:text-[5.4rem] font-bold text-stone-900 leading-[1.02] tracking-tightest mb-6"
-          >
-            <span className="block">Automated Vehicle</span>
-            <span className="relative inline-block mt-1">
-              <span
-                aria-hidden
-                className="absolute -inset-x-6 -inset-y-3 -z-10 rounded-2xl"
-                style={{
-                  background:
-                    "linear-gradient(135deg, rgba(127,136,118,0.18) 0%, rgba(196,167,125,0.14) 100%)",
-                  filter: "blur(28px)",
-                }}
-              />
-              <span className="relative z-10 text-transparent bg-clip-text bg-gradient-to-br from-sage-800 via-sage-600 to-bronze-500">
-                Expiry Enforcement
-              </span>
+      {/* ════ SECTION 1 — MISSION HERO ════════════════════════════ */}
+      <section id="mission" className="relative max-w-7xl mx-auto px-6 pt-20 pb-16">
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+          className="max-w-3xl"
+        >
+          <div className="inline-flex items-center gap-2 rounded-full border border-sage-700/50 bg-sage-900/30 pl-1.5 pr-3.5 py-1 mb-7">
+            <span className="relative inline-flex h-4 w-4 items-center justify-center rounded-full bg-sage-700">
+              <span className="absolute inset-0 rounded-full bg-sage-500 opacity-50 animate-ping" />
+              <Radio className="relative h-2.5 w-2.5 text-sand-100" />
             </span>
-          </motion.h1>
+            <span className="font-mono text-2xs font-semibold uppercase tracking-[0.18em] text-sage-300">
+              Smart City Pilot · Pune · MH-12 / MH-14
+            </span>
+          </div>
 
-          <motion.p
-            {...fadeUp(0.15)}
-            className="text-lg md:text-xl text-stone-500 max-w-2xl mx-auto mb-10 leading-relaxed"
-          >
-            Enterprise-grade ANPR detection · real-time CCTV monitoring ·
-            AI-powered OCR · automated challan generation · live surveillance
-            dashboard.
-          </motion.p>
+          <h1 className="font-display text-4xl sm:text-5xl lg:text-[3.4rem] font-semibold tracking-tightest leading-[1.06] text-stone-100">
+            AI-powered vehicle intelligence and{" "}
+            <span className="text-sage-300">automated compliance enforcement.</span>
+          </h1>
 
-          <motion.div {...fadeUp(0.22)} className="flex flex-wrap items-center justify-center gap-3 mb-16">
-            <Link
-              href="/dashboard"
-              className={cn(
-                "group relative inline-flex items-center gap-2 font-semibold px-7 py-3.5 rounded-xl transition-all",
-                "bg-sage-600 text-white hover:bg-sage-700",
-                "shadow-[0_18px_50px_-12px_rgba(127,136,118,0.55)] hover:shadow-[0_26px_60px_-12px_rgba(127,136,118,0.7)]",
-                "hover:-translate-y-0.5",
-              )}
-            >
-              <span
-                aria-hidden
-                className="pointer-events-none absolute inset-0 rounded-xl bg-gradient-to-b from-white/15 to-transparent"
-              />
-              Open Dashboard
-              <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-            </Link>
+          <p className="mt-6 text-base sm:text-lg text-stone-400 leading-relaxed max-w-2xl">
+            VAAHAN AI watches the road network the way an officer never could —
+            every vehicle, every lane, every hour. Live camera feeds are read by a
+            YOLOv8 + OCR pipeline, checked against the compliance registry, and
+            converted into court-ready evidence and e-challans in under a tenth
+            of a second.
+          </p>
+
+          <div className="mt-8 flex flex-wrap items-center gap-3">
             <Link
               href="/login"
-              className={cn(
-                "inline-flex items-center gap-2 font-semibold px-7 py-3.5 rounded-xl transition-all",
-                "bg-white/70 backdrop-blur-xl text-stone-700 border border-stone-200/60",
-                "hover:bg-white hover:border-stone-300 hover:-translate-y-0.5",
-                "shadow-[0_10px_30px_-12px_rgba(15,23,42,0.18)]",
-              )}
+              className="inline-flex items-center gap-2 bg-sage-600 text-white text-sm font-semibold px-5 py-2.5 rounded-lg hover:bg-sage-500 transition-colors ring-1 ring-sage-500/50"
             >
-              Sign In
+              <LayoutDashboard className="h-4 w-4" />
+              Access Command Center
             </Link>
-          </motion.div>
+            <a
+              href="#system"
+              className="inline-flex items-center gap-2 text-sm font-semibold px-5 py-2.5 rounded-lg border border-white/10 text-stone-300 hover:bg-white/[0.04] hover:text-stone-100 transition-colors"
+            >
+              How the system works
+            </a>
+          </div>
+        </motion.div>
 
-          {/* Feature badges row — small operational chips */}
-          <motion.div
-            {...fadeUp(0.26)}
-            className="flex flex-wrap items-center justify-center gap-2 mb-10"
-          >
-            {[
-              { icon: Camera, label: "Multi-camera RTSP" },
-              { icon: Activity, label: "<250ms inference" },
-              { icon: ShieldCheck, label: "RBAC · audit-logged" },
-              { icon: Globe, label: "Smart-city scale" },
-            ].map(({ icon: Icon, label }) => (
-              <span
-                key={label}
-                className="inline-flex items-center gap-1.5 px-2.5 h-7 rounded-full text-2xs font-semibold tracking-wide text-stone-600
-                           bg-white/60 backdrop-blur-md border border-white/70 ring-1 ring-stone-200/40 shadow-sm"
-              >
-                <Icon className="h-3 w-3 text-sage-700" />
-                {label}
-              </span>
-            ))}
-          </motion.div>
-
-          {/* Stats row — glassmorphism with depth */}
-          <motion.div
-            {...fadeUp(0.3)}
-            className="grid grid-cols-2 md:grid-cols-4 gap-3 max-w-2xl mx-auto"
-          >
-            {[
-              { value: "94.2%", label: "Detection Accuracy", accent: "text-sage-700" },
-              { value: "148ms", label: "Avg Processing", accent: "text-bronze-600" },
-              { value: "YOLOv8", label: "AI Model", accent: "text-stone-800" },
-              { value: "EasyOCR", label: "OCR Engine", accent: "text-stone-800" },
-            ].map(({ value, label, accent }, i) => (
-              <motion.div
-                key={label}
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.35 + i * 0.06, duration: 0.5 }}
-                whileHover={{ y: -3 }}
-                className={cn(
-                  "relative p-4 rounded-2xl text-center overflow-hidden",
-                  "bg-white/55 backdrop-blur-xl border border-white/70",
-                  "shadow-[0_18px_38px_-18px_rgba(15,23,42,0.25)] ring-1 ring-stone-200/40",
-                )}
-              >
-                {/* Inner highlight */}
-                <span
-                  aria-hidden
-                  className="pointer-events-none absolute inset-x-3 top-0 h-px bg-gradient-to-r from-transparent via-white/90 to-transparent"
-                />
-                <p className={cn("font-display text-2xl font-bold tabular-nums tracking-tight", accent)}>
-                  {value}
-                </p>
-                <p className="text-2xs text-stone-400 mt-1 font-mono uppercase tracking-widest">
-                  {label}
-                </p>
-              </motion.div>
-            ))}
-          </motion.div>
-        </div>
+        {/* Live pipeline flow */}
+        <motion.div
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.25, duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+          className="mt-14"
+        >
+          <HeroPipeline />
+        </motion.div>
       </section>
 
-      {/* ── Features ─────────────────────────────────────────── */}
-      <section id="features" className="relative py-24 border-y border-stone-200/60">
-        <div className="absolute inset-0 bg-gradient-to-b from-stone-100/50 to-stone-50 pointer-events-none" />
-        <div className="relative max-w-6xl mx-auto px-6">
-          <motion.div {...fadeUp(0)} className="text-center mb-14">
-            <p className="text-2xs font-semibold uppercase tracking-[0.20em] text-stone-400 font-mono mb-3">
-              Capabilities
+      {/* ════ SECTION 2 — PROBLEM STATEMENT ═══════════════════════ */}
+      <section className="relative border-t border-white/[0.05]">
+        <div className="max-w-7xl mx-auto px-6 py-20">
+          <motion.div {...reveal} className="max-w-2xl mb-10">
+            <p className="font-mono text-2xs font-semibold uppercase tracking-[0.2em] text-peach-400 mb-3">
+              The enforcement gap
             </p>
-            <h2 className="font-display text-3xl md:text-4xl font-bold text-stone-900 mb-3">
-              Complete AI Enforcement Stack
+            <h2 className="font-display text-2xl sm:text-3xl font-semibold tracking-tight text-stone-100">
+              Manual enforcement cannot keep pace with the road.
             </h2>
-            <p className="text-stone-500 max-w-xl mx-auto">
-              Every component production-ready. Real AI models, real database, real
-              pipelines.
+            <p className="mt-3 text-sm text-stone-400 leading-relaxed">
+              India's vehicle population grows faster than any checkpoint can
+              scale. Compliance failures stay invisible until they become
+              accidents, fraud, or lost revenue — because no human team can
+              verify documents at traffic speed.
             </p>
           </motion.div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
             {[
-              { icon: Camera, color: "text-sage-700", bg: "bg-sage-50 border-sage-200", title: "Multi-Camera RTSP", desc: "Live CCTV ingestion via OpenCV. RTSP/HTTP/USB. Per-camera async AI pipeline with reconnect logic." },
-              { icon: Zap, color: "text-bronze-600", bg: "bg-bronze-50 border-bronze-200", title: "YOLOv8 Detection", desc: "Detects 4 vehicle classes. Dedicated plate model with Haar cascade fallback. GPU-accelerated." },
-              { icon: FileText, color: "text-sage-600", bg: "bg-sage-50 border-sage-100", title: "Dual-Engine OCR", desc: "EasyOCR + PaddleOCR confidence chain. Position-aware character correction. Tesseract fallback." },
-              { icon: ShieldCheck, color: "text-sage-700", bg: "bg-sage-100 border-sage-200", title: "Expiry Validation", desc: "Registration, insurance, PUC checked against PostgreSQL registry. pg_trgm fuzzy matching." },
-              { icon: Activity, color: "text-peach-600", bg: "bg-peach-50 border-peach-200", title: "Async Challans", desc: "Idempotent Celery tasks. PDF with evidence photos. ReportLab. Auto SMS + email notifications." },
-              { icon: Globe, color: "text-stone-600", bg: "bg-stone-100 border-stone-200", title: "WebSocket Live", desc: "Authenticated WS rooms per camera. Redis pub/sub relay from Celery to browser dashboard." },
-              { icon: Database, color: "text-stone-600", bg: "bg-stone-100 border-stone-200", title: "PostgreSQL + Redis", desc: "Async SQLAlchemy 2.0, UUID keys, migrations. Redis for queuing, rate-limiting, pub/sub." },
-              { icon: TrendingUp, color: "text-bronze-600", bg: "bg-bronze-50 border-bronze-100", title: "Analytics Dashboard", desc: "7-day trends, camera performance, violation breakdown, AI perf metrics. Recharts." },
-              { icon: Lock, color: "text-stone-700", bg: "bg-stone-100 border-stone-200", title: "JWT + RBAC", desc: "Access + refresh token rotation. 4 roles. Sliding-window Redis rate limiter. Audit logs." },
-            ].map(({ icon: Icon, color, bg, title, desc }, i) => (
+              {
+                icon: ShieldAlert,
+                stat: "~1 in 2",
+                title: "Vehicles ride uninsured",
+                body: "Industry estimates put uninsured two-wheelers near half the fleet. Each one is an unrecoverable liability on the road.",
+              },
+              {
+                icon: AlertTriangle,
+                stat: "Expired & unseen",
+                title: "Registration / PUC lapses",
+                body: "Document expiry is invisible at a glance. A vehicle can run years past its registration or pollution check without ever being stopped.",
+              },
+              {
+                icon: Scale,
+                stat: "~40 / shift",
+                title: "Manual verification ceiling",
+                body: "A checkpoint officer can physically verify only a few dozen vehicles per shift — while thousands pass the same junction every hour.",
+              },
+              {
+                icon: FolderOpen,
+                stat: "Paper trails",
+                title: "Evidence that doesn't hold",
+                body: "Handwritten challans and unverifiable photographs collapse under dispute. Enforcement without evidence is revenue lost in court.",
+              },
+            ].map((p, i) => (
               <motion.div
-                key={title}
-                initial={{ opacity: 0, y: 12 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: "-40px" }}
-                transition={{ delay: i * 0.04, duration: 0.45 }}
-                className={cn(
-                  "group relative rounded-xl border p-5 transition-all duration-200",
-                  "bg-white/70 backdrop-blur-sm border-stone-200/60",
-                  "shadow-md shadow-stone-900/[0.03]",
-                  "hover:shadow-xl hover:shadow-stone-900/[0.06] hover:-translate-y-0.5",
-                  "hover:bg-white hover:border-stone-300/60",
-                )}
+                key={p.title}
+                {...reveal}
+                transition={{ ...reveal.transition, delay: i * 0.07 }}
+                className="rounded-xl border border-white/[0.07] bg-white/[0.025] p-5"
               >
-                <div className={cn("inline-flex h-9 w-9 items-center justify-center rounded-lg border mb-3", bg)}>
-                  <Icon className={cn("h-4 w-4", color)} />
-                </div>
-                <h3 className="font-display text-sm font-semibold text-stone-900 mb-1.5">
-                  {title}
-                </h3>
-                <p className="text-xs text-stone-500 leading-relaxed">{desc}</p>
+                <p.icon className="h-4 w-4 text-peach-400" />
+                <p className="mt-3 font-display text-xl font-semibold text-stone-100 tabular-nums">{p.stat}</p>
+                <p className="mt-1 text-sm font-medium text-stone-300">{p.title}</p>
+                <p className="mt-2 text-xs leading-relaxed text-stone-500">{p.body}</p>
               </motion.div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ── Architecture ──────────────────────────────────────── */}
-      <section id="architecture" className="relative py-24 bg-stone-50">
-        <LightRaysBackground intensity="low" />
-        <div className="relative max-w-4xl mx-auto px-6">
-          <motion.div {...fadeUp(0)} className="text-center mb-12">
-            <p className="text-2xs font-semibold uppercase tracking-[0.20em] text-stone-400 font-mono mb-3">
-              System Design
+      {/* ════ SECTION 3 — HOW IT WORKS ════════════════════════════ */}
+      <section id="system" className="relative border-t border-white/[0.05]">
+        <div className="max-w-7xl mx-auto px-6 py-20">
+          <motion.div {...reveal} className="max-w-2xl mb-12">
+            <p className="font-mono text-2xs font-semibold uppercase tracking-[0.2em] text-sage-400 mb-3">
+              How VAAHAN AI works
             </p>
-            <h2 className="font-display text-3xl md:text-4xl font-bold text-stone-900 mb-3">
-              System Architecture
+            <h2 className="font-display text-2xl sm:text-3xl font-semibold tracking-tight text-stone-100">
+              Camera to challan in 80 milliseconds.
             </h2>
-            <p className="text-stone-500">Production-ready layered design</p>
           </motion.div>
-          <motion.div
-            {...fadeUp(0.1)}
-            className={cn(
-              "rounded-2xl p-7 font-mono text-xs leading-relaxed overflow-x-auto",
-              "bg-stone-900 text-stone-300",
-              "shadow-2xl shadow-stone-900/30 ring-1 ring-white/5",
-              "backdrop-blur-xl",
-            )}
-          >
-            <pre className="whitespace-pre">{`Browser  ──────────────────────────────────────────  Next.js 14
-            REST API + WebSocket (JWT authenticated)
-Nginx  ────────────────────────────────────────────  Reverse Proxy
-  │
-  ├── FastAPI  ─────  /api/v1/auth │ cameras │ detections
-  │                   /api/v1/challans │ analytics │ ws/*
-  │
-  ├── AI Pipeline (asyncio task per camera)
-  │     OpenCV → YOLOv8 → Plate Crop → Preprocess
-  │     → EasyOCR → DB Lookup → Expiry Check
-  │     → Evidence Save → Detection Persist
-  │     → Celery Enqueue → WebSocket Broadcast
-  │
-  ├── Celery Workers  (queues: ai / notifications / reports)
-  │     process_detection_violation  (idempotent)
-  │     send_challan_sms  (Twilio E.164)
-  │     send_challan_email  (SMTP HTML)
-  │
-  ├── PostgreSQL 16  ──  users vehicles cameras
-  │                       detections challans notifications
-  │
-  └── Redis 7  ──  rate-limit  ws:broadcasts  celery`}</pre>
-          </motion.div>
-        </div>
-      </section>
 
-      {/* ── Tech stack ────────────────────────────────────────── */}
-      <section className="relative py-14 border-y border-stone-200/60 bg-gradient-to-b from-stone-100/50 to-stone-50">
-        <div className="max-w-5xl mx-auto px-6">
-          <p className="text-center text-2xs font-semibold uppercase tracking-widest text-stone-400 font-mono mb-6">
-            Technology Stack
-          </p>
-          <div className="flex flex-wrap items-center justify-center gap-2">
-            {[
-              "Python 3.11", "FastAPI", "PostgreSQL 16", "Redis 7", "Celery",
-              "YOLOv8", "EasyOCR", "OpenCV", "Next.js 14", "TypeScript",
-              "Tailwind CSS", "Framer Motion", "Recharts", "Docker", "Nginx",
-            ].map((t) => (
-              <span
-                key={t}
-                className={cn(
-                  "text-xs px-3 py-1.5 rounded-full font-mono transition-all",
-                  "bg-white/70 backdrop-blur-sm border border-stone-200/60 text-stone-600",
-                  "shadow-sm hover:shadow-md hover:-translate-y-0.5 hover:bg-white",
-                )}
-              >
-                {t}
-              </span>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── Quick Start ───────────────────────────────────────── */}
-      <section id="quickstart" className="relative py-24 bg-stone-900 overflow-hidden">
-        {/* Dark section light rays */}
-        <div className="absolute inset-0 pointer-events-none" aria-hidden>
-          <div
-            className="absolute -top-[30%] left-1/2 -translate-x-1/2 w-[140%] h-[100%] opacity-30"
-            style={{
-              background: `conic-gradient(
-                from 200deg at 50% 0%,
-                transparent 0deg,
-                rgba(127,136,118,0.15) 15deg,
-                transparent 30deg,
-                transparent 120deg,
-                rgba(196,167,125,0.10) 140deg,
-                transparent 160deg,
-                transparent 250deg,
-                rgba(127,136,118,0.08) 270deg,
-                transparent 290deg
-              )`,
-              filter: "blur(60px)",
-            }}
-          />
-        </div>
-
-        <div className="relative max-w-3xl mx-auto px-6 text-center">
-          <motion.div {...fadeUp(0)}>
-            <p className="text-2xs font-semibold uppercase tracking-[0.20em] text-stone-500 font-mono mb-3">
-              Deployment
-            </p>
-            <h2 className="font-display text-3xl md:text-4xl font-bold text-stone-50 mb-3">
-              Deploy in 3 Commands
-            </h2>
-            <p className="text-stone-400 mb-8">
-              No manual model downloads. Everything auto-configures.
-            </p>
-          </motion.div>
-          <motion.div
-            {...fadeUp(0.1)}
-            className={cn(
-              "rounded-xl p-5 font-mono text-sm text-left mb-8",
-              "bg-stone-950/80 backdrop-blur-md border border-stone-800/60",
-              "shadow-2xl shadow-black/20 ring-1 ring-white/5",
-            )}
-          >
-            <p className="text-stone-600 mb-1"># 1. Configure environment</p>
-            <p className="text-stone-300">
-              cp .env.example .env{" "}
-              <span className="text-stone-600"># then edit passwords</span>
-            </p>
-            <p className="text-stone-600 mt-3 mb-1"># 2. Start everything</p>
-            <p className="text-stone-300">docker compose up --build</p>
-            <p className="text-stone-600 mt-3 mb-1"># 3. Seed test data</p>
-            <p className="text-stone-300">
-              docker exec enforcement-backend python scripts/seed_db.py
-            </p>
-            <p className="text-stone-500 mt-3">
-              # Open http://localhost → Login → Cameras → Start Stream
-            </p>
-          </motion.div>
-          <motion.div {...fadeUp(0.18)}>
-            <Link
-              href="/dashboard"
-              className={cn(
-                "group inline-flex items-center gap-2 font-bold px-8 py-3.5 rounded-xl transition-all",
-                "bg-sage-500 text-white hover:bg-sage-400",
-                "shadow-xl shadow-sage-500/20 hover:shadow-2xl hover:shadow-sage-400/30",
-                "hover:-translate-y-0.5",
-              )}
-            >
-              Open Dashboard
-              <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-            </Link>
-          </motion.div>
-        </div>
-      </section>
-
-      {/* ── Footer ────────────────────────────────────────────── */}
-      <footer className="border-t border-stone-200/60 py-8 bg-stone-50">
-        <div className="max-w-6xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <div className="flex h-6 w-6 items-center justify-center rounded bg-sage-600 shadow-sm">
-              <Shield className="h-3 w-3 text-white" />
+          <div className="relative">
+            {/* Connector */}
+            <div className="hidden lg:block absolute top-[26px] left-[6%] right-[6%] h-px bg-gradient-to-r from-sage-700/0 via-sage-600/50 to-sage-700/0" aria-hidden />
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
+              {[
+                { icon: Camera,    t: "T+0ms",  title: "Live capture",      body: "Junction cameras stream frames from the Pune corridor network — expressway exits to MG Road." },
+                { icon: Crosshair, t: "T+12ms", title: "Vehicle lock",      body: "YOLOv8 isolates every vehicle in frame and pins the number-plate region with pixel coordinates." },
+                { icon: Zap,       t: "T+38ms", title: "OCR extraction",    body: "EasyOCR resolves the registration mark with a per-character confidence score." },
+                { icon: Scale,     t: "T+55ms", title: "Compliance check",  body: "The plate is verified against registry, insurance, PUC and blacklist state in one pass." },
+                { icon: FileText,  t: "T+80ms", title: "Evidence + action", body: "Frames are hashed into a tamper-evident archive; violations auto-generate a bilingual e-challan." },
+              ].map((s, i) => (
+                <motion.div
+                  key={s.title}
+                  {...reveal}
+                  transition={{ ...reveal.transition, delay: i * 0.08 }}
+                  className="relative"
+                >
+                  <div className="relative z-10 flex h-[52px] w-[52px] items-center justify-center rounded-xl border border-sage-700/50 bg-sage-900/40 shadow-glow-sage">
+                    <s.icon className="h-5 w-5 text-sage-300" strokeWidth={1.75} />
+                  </div>
+                  <p className="mt-3 font-mono text-2xs text-bronze-300 tabular-nums tracking-[0.1em]">{s.t}</p>
+                  <p className="mt-1 text-sm font-semibold text-stone-200">{s.title}</p>
+                  <p className="mt-1.5 text-xs leading-relaxed text-stone-500">{s.body}</p>
+                </motion.div>
+              ))}
             </div>
-            <span className="font-display text-xs font-bold text-stone-700">
-              VAAHAN AI — Enforcement Platform
+          </div>
+        </div>
+      </section>
+
+      {/* ════ SECTION 4 — IMPACT METRICS ══════════════════════════ */}
+      <section id="impact" className="relative border-t border-white/[0.05]">
+        <div className="max-w-7xl mx-auto px-6 py-20">
+          <motion.div {...reveal} className="flex flex-wrap items-end justify-between gap-4 mb-10">
+            <div>
+              <p className="font-mono text-2xs font-semibold uppercase tracking-[0.2em] text-sage-400 mb-3">
+                Pilot programme · cumulative
+              </p>
+              <h2 className="font-display text-2xl sm:text-3xl font-semibold tracking-tight text-stone-100">
+                What one corridor network already delivers.
+              </h2>
+            </div>
+            <span className="font-mono text-2xs uppercase tracking-[0.14em] text-stone-500">
+              PMC + PCMC limits · 12 zones · 24 cameras
+            </span>
+          </motion.div>
+
+          <div className="grid grid-cols-2 xl:grid-cols-4 divide-x divide-y xl:divide-y-0 divide-white/[0.06] rounded-xl border border-white/[0.07] bg-white/[0.02] overflow-hidden">
+            {[
+              { value: "240K+", label: "Vehicles monitored",  sub: "AI reads across the network" },
+              { value: "12K+",  label: "Violations detected", sub: "insurance · PUC · registration" },
+              { value: "100%",  label: "Evidence integrity",  sub: "hashed, archived, court-ready" },
+              { value: "94.2",  label: "Compliance score",    sub: "network-wide · trending up" },
+            ].map((m, i) => (
+              <motion.div
+                key={m.label}
+                {...reveal}
+                transition={{ ...reveal.transition, delay: i * 0.07 }}
+                className="px-6 py-7"
+              >
+                <p className="font-display text-3xl sm:text-4xl font-semibold text-stone-100 tabular-nums" style={{ textShadow: "0 0 24px rgba(169,179,148,0.25)" }}>
+                  {m.value}
+                </p>
+                <p className="mt-2 text-sm font-medium text-stone-300">{m.label}</p>
+                <p className="mt-0.5 font-mono text-2xs text-stone-500">{m.sub}</p>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ════ SECTION 5 — TECHNOLOGY STACK ════════════════════════ */}
+      <section className="relative border-t border-white/[0.05]">
+        <div className="max-w-7xl mx-auto px-6 py-20">
+          <motion.div {...reveal} className="max-w-2xl mb-10">
+            <p className="font-mono text-2xs font-semibold uppercase tracking-[0.2em] text-bronze-300 mb-3">
+              Technology stack
+            </p>
+            <h2 className="font-display text-2xl sm:text-3xl font-semibold tracking-tight text-stone-100">
+              Production-grade, end to end.
+            </h2>
+          </motion.div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+            {[
+              { name: "YOLOv8",     role: "vehicle detection",   icon: Crosshair },
+              { name: "EasyOCR",    role: "plate recognition",   icon: Zap },
+              { name: "FastAPI",    role: "control plane",       icon: Workflow },
+              { name: "PostgreSQL", role: "evidence store",      icon: Database },
+              { name: "Redis",      role: "stream bus",          icon: Radio },
+              { name: "Celery",     role: "task pipeline",       icon: Layers },
+              { name: "Next.js 14", role: "operations console",  icon: LayoutDashboard },
+              { name: "WebSocket",  role: "live intelligence",   icon: Radio },
+              { name: "Docker",     role: "deployment",          icon: Cpu },
+              { name: "JWT + RBAC", role: "role-gated access",   icon: Lock },
+            ].map((t, i) => (
+              <motion.div
+                key={t.name}
+                {...reveal}
+                transition={{ ...reveal.transition, delay: i * 0.04 }}
+                className="rounded-lg border border-white/[0.07] bg-white/[0.025] px-4 py-3.5 flex items-center gap-3 hover:border-sage-600/40 hover:bg-sage-900/15 transition-colors"
+              >
+                <t.icon className="h-4 w-4 text-sage-400 shrink-0" strokeWidth={1.75} />
+                <div className="min-w-0">
+                  <p className="font-mono text-xs font-semibold text-stone-200 truncate">{t.name}</p>
+                  <p className="font-mono text-2xs text-stone-500 truncate">{t.role}</p>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ════ SECTION 6 — SYSTEM ARCHITECTURE ═════════════════════ */}
+      <section id="architecture" className="relative border-t border-white/[0.05]">
+        <div className="max-w-7xl mx-auto px-6 py-20">
+          <motion.div {...reveal} className="max-w-2xl mb-10">
+            <p className="font-mono text-2xs font-semibold uppercase tracking-[0.2em] text-sage-400 mb-3">
+              System architecture
+            </p>
+            <h2 className="font-display text-2xl sm:text-3xl font-semibold tracking-tight text-stone-100">
+              Five layers, one evidence chain.
+            </h2>
+            <p className="mt-2 text-sm text-stone-500">Select a layer to inspect it.</p>
+          </motion.div>
+
+          <motion.div {...reveal}>
+            <ArchitectureDiagram />
+          </motion.div>
+        </div>
+      </section>
+
+      {/* ════ SECTION 7 — CONSOLE PREVIEW ═════════════════════════ */}
+      <section className="relative border-t border-white/[0.05]">
+        <div className="max-w-7xl mx-auto px-6 py-20">
+          <motion.div {...reveal} className="max-w-2xl mb-10">
+            <p className="font-mono text-2xs font-semibold uppercase tracking-[0.2em] text-peach-400 mb-3">
+              Inside the console
+            </p>
+            <h2 className="font-display text-2xl sm:text-3xl font-semibold tracking-tight text-stone-100">
+              Four operational surfaces. Zero dashboards.
+            </h2>
+          </motion.div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <PreviewCard
+              title="Command Center"
+              caption="Threat feed · live intelligence · enforcement queue on one zoned wall"
+              delay={0}
+            >
+              <MockCommandCenter />
+            </PreviewCard>
+            <PreviewCard
+              title="Surveillance Wall"
+              caption="Live AI feeds with OCR overlays, ceremonies, and an evidence filmstrip"
+              delay={0.06}
+            >
+              <MockSurveillance />
+            </PreviewCard>
+            <PreviewCard
+              title="Evidence Workbench"
+              caption="Three-stage forensic bench — frame, vehicle isolation, plate extraction"
+              delay={0.12}
+            >
+              <MockWorkbench />
+            </PreviewCard>
+            <PreviewCard
+              title="Enforcement Case Files"
+              caption="Every challan is a case: vehicle, owner, compliance, risk, history"
+              delay={0.18}
+            >
+              <MockCaseFiles />
+            </PreviewCard>
+          </div>
+        </div>
+      </section>
+
+      {/* ════ SECTION 8 — FINAL CTA ═══════════════════════════════ */}
+      <section className="relative border-t border-white/[0.05]">
+        <div className="max-w-4xl mx-auto px-6 py-24 text-center">
+          <motion.div {...reveal}>
+            <div className="mx-auto mb-6 flex h-12 w-12 items-center justify-center rounded-2xl bg-sage-800 ring-1 ring-sage-500/40 shadow-glow-sage">
+              <Fingerprint className="h-5 w-5 text-sand-100" />
+            </div>
+            <h2 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight text-stone-100">
+              The road is already being read.
+            </h2>
+            <p className="mt-3 text-sm text-stone-400 max-w-xl mx-auto">
+              Step into the Pune Regional Surveillance Network — live feeds,
+              forensic evidence, and the enforcement queue, in one command center.
+            </p>
+            <div className="mt-8 flex items-center justify-center gap-3">
+              <Link
+                href="/login"
+                className="inline-flex items-center gap-2 bg-sage-600 text-white text-sm font-semibold px-6 py-3 rounded-lg hover:bg-sage-500 transition-colors ring-1 ring-sage-500/50"
+              >
+                <LayoutDashboard className="h-4 w-4" />
+                Access Command Center
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </div>
+          </motion.div>
+        </div>
+
+        {/* Footer */}
+        <footer className="border-t border-white/[0.05]">
+          <div className="max-w-7xl mx-auto px-6 py-6 flex flex-wrap items-center justify-between gap-3 font-mono text-2xs uppercase tracking-[0.14em] text-stone-600">
+            <span>VAAHAN AI · Pune Regional Surveillance Network · Smart City Pilot</span>
+            <span className="flex items-center gap-2">
+              <ShieldCheck className="h-3 w-3" />
+              Evidence-grade · RBAC-gated · Audit-logged
             </span>
           </div>
-          <p className="text-xs text-stone-400 font-mono">
-            FastAPI · YOLOv8 · EasyOCR · Next.js 14 · PostgreSQL · Docker
-          </p>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   HERO PIPELINE — the platform working, on loop. Stage lights walk
+   left→right while simulated corridor reads print to the console card.
+   ════════════════════════════════════════════════════════════════════ */
+function HeroPipeline() {
+  const [cycle, setCycle] = useState(0);
+  const [stage, setStage] = useState(0);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setStage((s) => {
+        if (s >= PIPE_STAGES.length - 1) {
+          setCycle((c) => c + 1);
+          return 0;
+        }
+        return s + 1;
+      });
+    }, 650);
+    return () => clearInterval(id);
+  }, []);
+
+  const history = [0, 1, 2].map(
+    (off) => SIM_READS[(cycle - off + SIM_READS.length * 8) % SIM_READS.length]
+  );
+
+  return (
+    <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] overflow-hidden">
+      <div className="flex items-center justify-between px-5 py-2.5 border-b border-white/[0.06]">
+        <span className="flex items-center gap-2 font-mono text-2xs font-semibold uppercase tracking-[0.16em] text-stone-400">
+          <span className="relative flex h-1.5 w-1.5">
+            <span className="absolute inset-0 rounded-full bg-status-success opacity-60 animate-ping" />
+            <span className="relative h-1.5 w-1.5 rounded-full bg-status-success" />
+          </span>
+          Live pipeline · simulated corridor feed
+        </span>
+        <span className="font-mono text-2xs text-stone-600 uppercase tracking-[0.14em]">80ms end-to-end</span>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+        {/* Stage flow */}
+        <div className="p-6 lg:p-8 flex items-center">
+          <div className="w-full flex items-center justify-between gap-2">
+            {PIPE_STAGES.map((s, i) => {
+              const active = i === stage;
+              const done = i < stage;
+              const Icon = s.icon;
+              return (
+                <div key={s.key} className="flex items-center flex-1 last:flex-none min-w-0">
+                  <div className="flex flex-col items-center gap-2 shrink-0">
+                    <div
+                      className={cn(
+                        "flex h-11 w-11 items-center justify-center rounded-xl border transition-all duration-300",
+                        active
+                          ? "border-sage-400/70 bg-sage-800/70 shadow-glow-sage scale-110"
+                          : done
+                            ? "border-sage-700/50 bg-sage-900/40"
+                            : "border-white/[0.08] bg-white/[0.02]"
+                      )}
+                    >
+                      <Icon
+                        className={cn(
+                          "h-[18px] w-[18px] transition-colors duration-300",
+                          active ? "text-sage-200" : done ? "text-sage-400" : "text-stone-600"
+                        )}
+                        strokeWidth={1.75}
+                      />
+                    </div>
+                    <span className={cn(
+                      "font-mono text-[0.625rem] font-semibold tracking-[0.14em] transition-colors duration-300",
+                      active ? "text-sage-300" : done ? "text-stone-400" : "text-stone-600"
+                    )}>
+                      {s.label}
+                    </span>
+                  </div>
+                  {i < PIPE_STAGES.length - 1 && (
+                    <div className="flex-1 mx-2 h-px relative overflow-hidden bg-white/[0.06] rounded-full min-w-[12px]">
+                      <div
+                        className={cn(
+                          "absolute inset-y-0 left-0 bg-sage-500/70 transition-all duration-500",
+                          i < stage ? "w-full" : "w-0"
+                        )}
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
-      </footer>
+
+        {/* Console card */}
+        <div className="border-t lg:border-t-0 lg:border-l border-white/[0.06] p-4 font-mono">
+          <p className="text-2xs uppercase tracking-[0.16em] text-stone-600 mb-2">Detection log</p>
+          <div className="space-y-1.5">
+            <AnimatePresence initial={false} mode="popLayout">
+              {history.map((r, i) => (
+                <motion.div
+                  key={`${r.plate}-${cycle - i}`}
+                  layout
+                  initial={{ opacity: 0, y: -6 }}
+                  animate={{ opacity: i === 0 ? 1 : 0.55 - i * 0.15, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className="flex items-center gap-2 text-2xs"
+                >
+                  {r.violation
+                    ? <ShieldAlert className="h-3 w-3 text-peach-400 shrink-0" />
+                    : <ShieldCheck className="h-3 w-3 text-sage-400 shrink-0" />}
+                  <span className="font-bold tracking-wider text-stone-200 shrink-0">{r.plate}</span>
+                  <span className={cn(
+                    "font-semibold shrink-0",
+                    r.violation ? "text-peach-400" : "text-sage-400"
+                  )}>
+                    {r.status}
+                  </span>
+                  <span className="text-stone-600 truncate">{r.zone}</span>
+                  <span className="ml-auto text-stone-600 tabular-nums shrink-0">{r.conf}%</span>
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </div>
+          <div className="mt-3 pt-2 border-t border-white/[0.06] flex items-center justify-between text-2xs text-stone-600">
+            <span>EVD ARCHIVE</span>
+            <motion.span key={cycle} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} className="tabular-nums text-stone-400">
+              #{(240318 + cycle).toLocaleString("en-IN")}
+            </motion.span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   ARCHITECTURE DIAGRAM — selectable layers with an inspector panel.
+   ════════════════════════════════════════════════════════════════════ */
+const LAYERS = [
+  {
+    key: "edge",
+    label: "EDGE",
+    title: "Camera network",
+    icon: Camera,
+    nodes: ["Junction cameras", "Mobile units", "RTSP / MJPEG ingest"],
+    body: "24 cameras across 12 Pune zones stream frames into the platform. Any RTSP or phone camera can join the network — the demo theatre runs on the same path as a roadside unit.",
+  },
+  {
+    key: "ai",
+    label: "AI CORE",
+    title: "Detection + OCR pipeline",
+    icon: Cpu,
+    nodes: ["YOLOv8 vehicle lock", "Plate localisation", "EasyOCR extraction"],
+    body: "Every frame passes a two-stage model: YOLOv8 isolates vehicles and plate regions, EasyOCR resolves the registration mark with per-character confidence. Sub-100ms per frame on commodity hardware.",
+  },
+  {
+    key: "control",
+    label: "CONTROL",
+    title: "FastAPI control plane",
+    icon: Workflow,
+    nodes: ["Compliance engine", "Challan generator", "RBAC + audit log"],
+    body: "The control plane verifies each read against registry, insurance, PUC and blacklist state, scores risk, and issues bilingual e-challans. Every action is role-gated and audit-logged.",
+  },
+  {
+    key: "data",
+    label: "DATA",
+    title: "Evidence store + stream bus",
+    icon: Database,
+    nodes: ["PostgreSQL evidence", "Redis stream bus", "Celery pipeline"],
+    body: "Frames, crops and decisions are hashed into PostgreSQL as a tamper-evident chain. Redis fans events out to every console in real time; Celery handles archival and notification work.",
+  },
+  {
+    key: "console",
+    label: "CONSOLE",
+    title: "Operations console",
+    icon: LayoutDashboard,
+    nodes: ["Command center", "Forensic workbench", "Case files"],
+    body: "Operators work a zoned command wall, a three-stage evidence bench, and enforcement case files — fed live over WebSocket, navigable end-to-end by keyboard.",
+  },
+];
+
+function ArchitectureDiagram() {
+  const [selected, setSelected] = useState(1);
+  const layer = LAYERS[selected];
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] gap-4">
+      {/* Layer stack */}
+      <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-4 space-y-2">
+        {LAYERS.map((l, i) => {
+          const active = i === selected;
+          const Icon = l.icon;
+          return (
+            <button
+              key={l.key}
+              onClick={() => setSelected(i)}
+              className={cn(
+                "w-full text-left rounded-lg border px-4 py-3 transition-all duration-200 group",
+                active
+                  ? "border-sage-500/50 bg-sage-900/30 shadow-glow-sage"
+                  : "border-white/[0.06] bg-white/[0.015] hover:border-white/[0.14]"
+              )}
+            >
+              <div className="flex items-center gap-3">
+                <Icon className={cn("h-4 w-4 shrink-0", active ? "text-sage-300" : "text-stone-500")} strokeWidth={1.75} />
+                <span className={cn(
+                  "font-mono text-2xs font-bold tracking-[0.16em] w-20 shrink-0",
+                  active ? "text-sage-300" : "text-stone-500"
+                )}>
+                  {l.label}
+                </span>
+                <span className={cn("text-sm font-medium flex-1 min-w-0 truncate", active ? "text-stone-100" : "text-stone-400")}>
+                  {l.title}
+                </span>
+                <div className="hidden sm:flex items-center gap-1.5">
+                  {l.nodes.map((n) => (
+                    <span
+                      key={n}
+                      className={cn(
+                        "font-mono text-[0.5625rem] px-1.5 py-0.5 rounded border whitespace-nowrap",
+                        active ? "border-sage-700/60 text-sage-300/90" : "border-white/[0.07] text-stone-600"
+                      )}
+                    >
+                      {n}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Inspector */}
+      <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-5 flex flex-col">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={layer.key}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+            className="flex-1"
+          >
+            <p className="font-mono text-2xs font-bold tracking-[0.18em] text-sage-400">{layer.label}</p>
+            <h3 className="mt-1 font-display text-lg font-semibold text-stone-100">{layer.title}</h3>
+            <p className="mt-3 text-sm leading-relaxed text-stone-400">{layer.body}</p>
+            <div className="mt-4 flex flex-wrap gap-1.5">
+              {layer.nodes.map((n) => (
+                <span key={n} className="font-mono text-2xs px-2 py-1 rounded-md border border-sage-700/50 bg-sage-900/25 text-sage-300">
+                  {n}
+                </span>
+              ))}
+            </div>
+          </motion.div>
+        </AnimatePresence>
+        <p className="mt-4 pt-3 border-t border-white/[0.06] font-mono text-2xs text-stone-600 uppercase tracking-[0.14em]">
+          One evidence chain · camera to court
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   CONSOLE PREVIEWS — stylised screen sketches (no screenshots needed).
+   ════════════════════════════════════════════════════════════════════ */
+function PreviewCard({ title, caption, delay, children }: {
+  title: string; caption: string; delay: number; children: React.ReactNode;
+}) {
+  return (
+    <motion.div
+      {...reveal}
+      transition={{ ...reveal.transition, delay }}
+      className="group rounded-xl border border-white/[0.07] bg-white/[0.02] overflow-hidden hover:border-sage-600/40 transition-colors"
+    >
+      <Link href="/login" className="block">
+        <div className="relative aspect-[16/8] bg-[#0c0a08] border-b border-white/[0.06] p-3 overflow-hidden">
+          {children}
+          <div className="absolute inset-0 bg-gradient-to-t from-[#0c0a08]/60 to-transparent pointer-events-none" />
+        </div>
+        <div className="px-4 py-3 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-stone-200">{title}</p>
+            <p className="mt-0.5 text-2xs text-stone-500 truncate">{caption}</p>
+          </div>
+          <ArrowRight className="h-4 w-4 text-stone-600 group-hover:text-sage-400 group-hover:translate-x-0.5 transition-all shrink-0" />
+        </div>
+      </Link>
+    </motion.div>
+  );
+}
+
+/* Abstract screen sketches — proportions of the real consoles */
+function MockCommandCenter() {
+  return (
+    <div className="h-full flex flex-col gap-1.5">
+      <div className="h-2.5 rounded-sm bg-white/[0.06]" />
+      <div className="h-4 rounded-sm bg-white/[0.04] flex gap-1 p-0.5">
+        {[...Array(6)].map((_, i) => <div key={i} className="flex-1 rounded-[2px] bg-sage-500/15" />)}
+      </div>
+      <div className="flex-1 flex gap-1.5 min-h-0">
+        <div className="w-1/5 rounded-sm bg-peach-500/10 border border-peach-500/20" />
+        <div className="flex-1 rounded-sm bg-sage-500/10 border border-sage-500/25 relative">
+          <div className="absolute inset-[20%] rounded-full border border-sage-400/30" />
+          <div className="absolute left-1/2 top-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-sage-400/70" />
+        </div>
+        <div className="w-1/4 rounded-sm bg-bronze-500/10 border border-bronze-500/20" />
+      </div>
+      <div className="h-3.5 rounded-sm bg-white/[0.04]" />
+    </div>
+  );
+}
+
+function MockSurveillance() {
+  return (
+    <div className="h-full flex gap-1.5">
+      <div className="flex-1 flex flex-col gap-1.5">
+        <div className="flex-1 rounded-sm bg-sage-900/40 border border-sage-500/25 relative overflow-hidden">
+          <div className="absolute left-[30%] top-[35%] h-1/3 w-1/4 border border-sage-400/60 rounded-[2px]" />
+          <div className="absolute left-[34%] top-[58%] h-[8%] w-[14%] border border-peach-400/70 rounded-[1px]" />
+          <div className="absolute inset-x-0 top-1/4 h-px bg-sage-400/20" />
+        </div>
+        <div className="h-1/4 flex gap-1">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className={cn("flex-1 rounded-[2px] border", i === 1 ? "bg-peach-500/15 border-peach-500/30" : "bg-white/[0.04] border-white/[0.06]")} />
+          ))}
+        </div>
+      </div>
+      <div className="w-1/4 rounded-sm bg-white/[0.04] border border-white/[0.06]" />
+    </div>
+  );
+}
+
+function MockWorkbench() {
+  return (
+    <div className="h-full flex flex-col gap-1.5">
+      <div className="h-2.5 rounded-sm bg-white/[0.06]" />
+      <div className="flex-1 flex gap-1.5 min-h-0">
+        <div className="flex-[1.6] rounded-sm bg-sage-900/40 border border-sage-500/25 relative">
+          <div className="absolute left-[25%] top-[30%] h-2/5 w-2/5 border border-sage-400/60 rounded-[2px]" />
+        </div>
+        <div className="flex-1 rounded-sm bg-white/[0.04] border border-white/[0.06]" />
+        <div className="flex-1 flex flex-col gap-1.5">
+          <div className="flex-1 rounded-sm bg-peach-500/10 border border-peach-500/25" />
+          <div className="h-1/3 rounded-sm bg-white/[0.05]" />
+        </div>
+      </div>
+      <div className="h-1/4 flex gap-1.5">
+        <div className="flex-1 rounded-sm bg-white/[0.04]" />
+        <div className="flex-[1.2] rounded-sm bg-sage-500/10 border border-sage-500/20" />
+      </div>
+    </div>
+  );
+}
+
+function MockCaseFiles() {
+  return (
+    <div className="h-full flex flex-col gap-1">
+      <div className="h-4 rounded-sm bg-white/[0.06]" />
+      {[
+        "bg-peach-500/15 border-l-2 border-peach-500/60",
+        "bg-white/[0.04] border-l-2 border-bronze-500/50",
+        "bg-white/[0.04] border-l-2 border-sage-500/50",
+      ].map((cls, i) => (
+        <div key={i} className={cn("flex-1 rounded-sm flex items-center gap-1.5 px-1.5", cls)}>
+          <div className="h-1.5 w-8 rounded-full bg-white/[0.12]" />
+          <div className="h-1.5 flex-1 rounded-full bg-white/[0.06]" />
+          <div className="h-1.5 w-5 rounded-full bg-white/[0.10]" />
+        </div>
+      ))}
+      <div className="flex-[2] rounded-sm bg-white/[0.03] border border-white/[0.06] flex gap-1.5 p-1.5">
+        <div className="flex-[1.4] rounded-[2px] bg-white/[0.05]" />
+        <div className="flex-1 rounded-[2px] bg-sage-500/10" />
+        <div className="w-1/4 rounded-[2px] bg-white/[0.05]" />
+      </div>
     </div>
   );
 }
