@@ -10,11 +10,14 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { LivingNetworkBackground } from "@/components/shared/LivingNetworkBackground";
+import { ThemeToggleMini } from "@/components/shared/ThemeToggleMini";
 
 /* ════════════════════════════════════════════════════════════════════
    VAAHAN AI — platform introduction.
-   Art-directed permanently dark (independent of console theme): this is
-   the official face of the Pune pilot deployment, not a marketing page.
+   Theme-aware: premium warm-paper light by default, cinematic dark on
+   toggle. Embedded pipeline/preview visuals stay dark — they are the
+   console screens of the deployment, monitors sitting on paper.
    ════════════════════════════════════════════════════════════════════ */
 
 const reveal = {
@@ -43,50 +46,47 @@ const PIPE_STAGES = [
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen text-stone-300 antialiased" style={{ background: "#100e0b" }}>
-      {/* Ambient atmosphere */}
-      <div
-        aria-hidden
-        className="pointer-events-none fixed inset-0"
-        style={{
-          background:
-            "radial-gradient(ellipse 900px 600px at 15% -5%, rgba(127,136,118,0.12), transparent 60%)," +
-            "radial-gradient(ellipse 800px 500px at 100% 15%, rgba(189,134,88,0.07), transparent 55%)," +
-            "radial-gradient(ellipse 1000px 700px at 50% 110%, rgba(237,159,126,0.05), transparent 60%)",
-        }}
-      />
-
+    <div className="min-h-screen text-foreground antialiased">
       {/* ── Nav ─────────────────────────────────────────────────── */}
-      <nav className="sticky top-0 z-50 backdrop-blur-xl border-b border-white/[0.06]" style={{ background: "rgba(16,14,11,0.85)" }}>
+      <nav className="sticky top-0 z-50 glass-warm border-b border-border dark:border-white/[0.06]">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-sage-800 ring-1 ring-sage-500/40 shadow-glow-sage">
               <Crosshair className="h-4 w-4 text-sand-100" strokeWidth={1.75} />
-              <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full bg-peach-400 border-[1.5px] border-[#100e0b]" />
+              <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full bg-peach-400 border-[1.5px] border-background" />
             </div>
             <div>
-              <span className="font-display text-sm font-bold text-stone-100 tracking-tight">VAAHAN AI</span>
-              <span className="ml-2 text-2xs text-stone-500 hidden sm:inline font-mono uppercase tracking-[0.18em]">
+              <span className="font-display text-sm font-bold text-foreground tracking-tight">VAAHAN AI</span>
+              <span className="ml-2 text-2xs text-foreground-subtle hidden sm:inline font-mono uppercase tracking-[0.18em]">
                 Pune Regional Surveillance Network
               </span>
             </div>
           </div>
-          <div className="hidden md:flex items-center gap-6 font-mono text-2xs uppercase tracking-[0.14em] text-stone-500">
-            <a href="#mission" className="hover:text-stone-200 transition-colors">Mission</a>
-            <a href="#system" className="hover:text-stone-200 transition-colors">System</a>
-            <a href="#impact" className="hover:text-stone-200 transition-colors">Impact</a>
-            <a href="#architecture" className="hover:text-stone-200 transition-colors">Architecture</a>
+          <div className="hidden md:flex items-center gap-6 font-mono text-2xs uppercase tracking-[0.14em] text-foreground-subtle">
+            <a href="#mission" className="hover:text-foreground transition-colors">Mission</a>
+            <a href="#system" className="hover:text-foreground transition-colors">System</a>
+            <a href="#impact" className="hover:text-foreground transition-colors">Impact</a>
+            <a href="#architecture" className="hover:text-foreground transition-colors">Architecture</a>
           </div>
-          <Link
-            href="/login"
-            className="inline-flex items-center gap-2 bg-sage-600 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-sage-500 transition-colors ring-1 ring-sage-500/50"
-          >
-            Access Console <ArrowRight className="h-3.5 w-3.5" />
-          </Link>
+          <div className="flex items-center gap-2">
+            <ThemeToggleMini />
+            <Link
+              href="/login"
+              className="inline-flex items-center gap-2 bg-sage-600 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-sage-500 transition-colors ring-1 ring-sage-500/50"
+            >
+              Access Console <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
         </div>
       </nav>
 
       {/* ════ SECTION 1 — MISSION HERO ════════════════════════════ */}
+      <div className="relative">
+        {/* The network, operating behind the mission statement */}
+        <LivingNetworkBackground
+          opacity={0.45}
+          className="[mask-image:linear-gradient(180deg,rgba(0,0,0,0.9)_0%,black_35%,transparent_96%)]"
+        />
       <section id="mission" className="relative max-w-7xl mx-auto px-6 pt-20 pb-16">
         <motion.div
           initial={{ opacity: 0, y: 16 }}
@@ -94,22 +94,22 @@ export default function LandingPage() {
           transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
           className="max-w-3xl"
         >
-          <div className="inline-flex items-center gap-2 rounded-full border border-sage-700/50 bg-sage-900/30 pl-1.5 pr-3.5 py-1 mb-7">
+          <div className="inline-flex items-center gap-2 rounded-full border border-sage-300 bg-sage-100/70 dark:border-sage-700/50 dark:bg-sage-900/30 pl-1.5 pr-3.5 py-1 mb-7">
             <span className="relative inline-flex h-4 w-4 items-center justify-center rounded-full bg-sage-700">
               <span className="absolute inset-0 rounded-full bg-sage-500 opacity-50 animate-ping" />
               <Radio className="relative h-2.5 w-2.5 text-sand-100" />
             </span>
-            <span className="font-mono text-2xs font-semibold uppercase tracking-[0.18em] text-sage-300">
+            <span className="font-mono text-2xs font-semibold uppercase tracking-[0.18em] text-sage-800 dark:text-sage-300">
               Smart City Pilot · Pune · MH-12 / MH-14
             </span>
           </div>
 
-          <h1 className="font-display text-4xl sm:text-5xl lg:text-[3.4rem] font-semibold tracking-tightest leading-[1.06] text-stone-100">
+          <h1 className="font-display text-4xl sm:text-5xl lg:text-[3.4rem] font-semibold tracking-tightest leading-[1.06] text-foreground">
             AI-powered vehicle intelligence and{" "}
-            <span className="text-sage-300">automated compliance enforcement.</span>
+            <span className="text-sage-700 dark:text-sage-300">automated compliance enforcement.</span>
           </h1>
 
-          <p className="mt-6 text-base sm:text-lg text-stone-400 leading-relaxed max-w-2xl">
+          <p className="mt-6 text-base sm:text-lg text-foreground-muted leading-relaxed max-w-2xl">
             VAAHAN AI watches the road network the way an officer never could —
             every vehicle, every lane, every hour. Live camera feeds are read by a
             YOLOv8 + OCR pipeline, checked against the compliance registry, and
@@ -127,10 +127,24 @@ export default function LandingPage() {
             </Link>
             <a
               href="#system"
-              className="inline-flex items-center gap-2 text-sm font-semibold px-5 py-2.5 rounded-lg border border-white/10 text-stone-300 hover:bg-white/[0.04] hover:text-stone-100 transition-colors"
+              className="inline-flex items-center gap-2 text-sm font-semibold px-5 py-2.5 rounded-lg border border-border-strong text-foreground-muted hover:bg-muted hover:text-foreground dark:border-white/10 dark:hover:bg-white/[0.04] transition-colors"
             >
               How the system works
             </a>
+          </div>
+
+          {/* Live operational indicators */}
+          <div className="mt-10 flex flex-wrap items-center gap-x-6 gap-y-2 font-mono text-2xs uppercase tracking-[0.14em] text-foreground-subtle">
+            <span className="flex items-center gap-1.5">
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="absolute inset-0 rounded-full bg-status-success opacity-60 animate-ping" />
+                <span className="relative h-1.5 w-1.5 rounded-full bg-status-success" />
+              </span>
+              24 cameras online
+            </span>
+            <span>12 zones reporting</span>
+            <span>AI engine nominal</span>
+            <span className="text-sage-700 dark:text-sage-400/80">evidence chain verified</span>
           </div>
         </motion.div>
 
@@ -144,18 +158,19 @@ export default function LandingPage() {
           <HeroPipeline />
         </motion.div>
       </section>
+      </div>
 
       {/* ════ SECTION 2 — PROBLEM STATEMENT ═══════════════════════ */}
-      <section className="relative border-t border-white/[0.05]">
+      <section className="relative border-t border-border dark:border-white/[0.05]">
         <div className="max-w-7xl mx-auto px-6 py-20">
           <motion.div {...reveal} className="max-w-2xl mb-10">
-            <p className="font-mono text-2xs font-semibold uppercase tracking-[0.2em] text-peach-400 mb-3">
+            <p className="font-mono text-2xs font-semibold uppercase tracking-[0.2em] text-peach-700 dark:text-peach-400 mb-3">
               The enforcement gap
             </p>
-            <h2 className="font-display text-2xl sm:text-3xl font-semibold tracking-tight text-stone-100">
+            <h2 className="font-display text-2xl sm:text-3xl font-semibold tracking-tight text-foreground">
               Manual enforcement cannot keep pace with the road.
             </h2>
-            <p className="mt-3 text-sm text-stone-400 leading-relaxed">
+            <p className="mt-3 text-sm text-foreground-muted leading-relaxed">
               India's vehicle population grows faster than any checkpoint can
               scale. Compliance failures stay invisible until they become
               accidents, fraud, or lost revenue — because no human team can
@@ -194,12 +209,12 @@ export default function LandingPage() {
                 key={p.title}
                 {...reveal}
                 transition={{ ...reveal.transition, delay: i * 0.07 }}
-                className="rounded-xl border border-white/[0.07] bg-white/[0.025] p-5"
+                className="rounded-xl border border-border bg-surface shadow-card dark:border-white/[0.07] dark:bg-white/[0.025] dark:shadow-none p-5"
               >
-                <p.icon className="h-4 w-4 text-peach-400" />
-                <p className="mt-3 font-display text-xl font-semibold text-stone-100 tabular-nums">{p.stat}</p>
-                <p className="mt-1 text-sm font-medium text-stone-300">{p.title}</p>
-                <p className="mt-2 text-xs leading-relaxed text-stone-500">{p.body}</p>
+                <p.icon className="h-4 w-4 text-peach-600 dark:text-peach-400" />
+                <p className="mt-3 font-display text-xl font-semibold text-foreground tabular-nums">{p.stat}</p>
+                <p className="mt-1 text-sm font-medium text-foreground">{p.title}</p>
+                <p className="mt-2 text-xs leading-relaxed text-foreground-subtle">{p.body}</p>
               </motion.div>
             ))}
           </div>
@@ -207,13 +222,13 @@ export default function LandingPage() {
       </section>
 
       {/* ════ SECTION 3 — HOW IT WORKS ════════════════════════════ */}
-      <section id="system" className="relative border-t border-white/[0.05]">
+      <section id="system" className="relative border-t border-border dark:border-white/[0.05]">
         <div className="max-w-7xl mx-auto px-6 py-20">
           <motion.div {...reveal} className="max-w-2xl mb-12">
-            <p className="font-mono text-2xs font-semibold uppercase tracking-[0.2em] text-sage-400 mb-3">
+            <p className="font-mono text-2xs font-semibold uppercase tracking-[0.2em] text-sage-700 dark:text-sage-400 mb-3">
               How VAAHAN AI works
             </p>
-            <h2 className="font-display text-2xl sm:text-3xl font-semibold tracking-tight text-stone-100">
+            <h2 className="font-display text-2xl sm:text-3xl font-semibold tracking-tight text-foreground">
               Camera to challan in 80 milliseconds.
             </h2>
           </motion.div>
@@ -235,12 +250,12 @@ export default function LandingPage() {
                   transition={{ ...reveal.transition, delay: i * 0.08 }}
                   className="relative"
                 >
-                  <div className="relative z-10 flex h-[52px] w-[52px] items-center justify-center rounded-xl border border-sage-700/50 bg-sage-900/40 shadow-glow-sage">
-                    <s.icon className="h-5 w-5 text-sage-300" strokeWidth={1.75} />
+                  <div className="relative z-10 flex h-[52px] w-[52px] items-center justify-center rounded-xl border border-sage-300 bg-sage-100/80 dark:border-sage-700/50 dark:bg-sage-900/40 shadow-glow-sage">
+                    <s.icon className="h-5 w-5 text-sage-700 dark:text-sage-300" strokeWidth={1.75} />
                   </div>
-                  <p className="mt-3 font-mono text-2xs text-bronze-300 tabular-nums tracking-[0.1em]">{s.t}</p>
-                  <p className="mt-1 text-sm font-semibold text-stone-200">{s.title}</p>
-                  <p className="mt-1.5 text-xs leading-relaxed text-stone-500">{s.body}</p>
+                  <p className="mt-3 font-mono text-2xs text-bronze-700 dark:text-bronze-300 tabular-nums tracking-[0.1em]">{s.t}</p>
+                  <p className="mt-1 text-sm font-semibold text-foreground">{s.title}</p>
+                  <p className="mt-1.5 text-xs leading-relaxed text-foreground-subtle">{s.body}</p>
                 </motion.div>
               ))}
             </div>
@@ -249,23 +264,23 @@ export default function LandingPage() {
       </section>
 
       {/* ════ SECTION 4 — IMPACT METRICS ══════════════════════════ */}
-      <section id="impact" className="relative border-t border-white/[0.05]">
+      <section id="impact" className="relative border-t border-border dark:border-white/[0.05]">
         <div className="max-w-7xl mx-auto px-6 py-20">
           <motion.div {...reveal} className="flex flex-wrap items-end justify-between gap-4 mb-10">
             <div>
-              <p className="font-mono text-2xs font-semibold uppercase tracking-[0.2em] text-sage-400 mb-3">
+              <p className="font-mono text-2xs font-semibold uppercase tracking-[0.2em] text-sage-700 dark:text-sage-400 mb-3">
                 Pilot programme · cumulative
               </p>
-              <h2 className="font-display text-2xl sm:text-3xl font-semibold tracking-tight text-stone-100">
+              <h2 className="font-display text-2xl sm:text-3xl font-semibold tracking-tight text-foreground">
                 What one corridor network already delivers.
               </h2>
             </div>
-            <span className="font-mono text-2xs uppercase tracking-[0.14em] text-stone-500">
+            <span className="font-mono text-2xs uppercase tracking-[0.14em] text-foreground-subtle">
               PMC + PCMC limits · 12 zones · 24 cameras
             </span>
           </motion.div>
 
-          <div className="grid grid-cols-2 xl:grid-cols-4 divide-x divide-y xl:divide-y-0 divide-white/[0.06] rounded-xl border border-white/[0.07] bg-white/[0.02] overflow-hidden">
+          <div className="grid grid-cols-2 xl:grid-cols-4 divide-x divide-y xl:divide-y-0 divide-border dark:divide-white/[0.06] rounded-xl border border-border bg-surface shadow-card dark:border-white/[0.07] dark:bg-white/[0.02] dark:shadow-none overflow-hidden">
             {[
               { value: "240K+", label: "Vehicles monitored",  sub: "AI reads across the network" },
               { value: "12K+",  label: "Violations detected", sub: "insurance · PUC · registration" },
@@ -278,11 +293,11 @@ export default function LandingPage() {
                 transition={{ ...reveal.transition, delay: i * 0.07 }}
                 className="px-6 py-7"
               >
-                <p className="font-display text-3xl sm:text-4xl font-semibold text-stone-100 tabular-nums" style={{ textShadow: "0 0 24px rgba(169,179,148,0.25)" }}>
+                <p className="font-display text-3xl sm:text-4xl font-semibold text-foreground tabular-nums" style={{ textShadow: "0 0 24px rgba(169,179,148,0.25)" }}>
                   {m.value}
                 </p>
-                <p className="mt-2 text-sm font-medium text-stone-300">{m.label}</p>
-                <p className="mt-0.5 font-mono text-2xs text-stone-500">{m.sub}</p>
+                <p className="mt-2 text-sm font-medium text-foreground">{m.label}</p>
+                <p className="mt-0.5 font-mono text-2xs text-foreground-subtle">{m.sub}</p>
               </motion.div>
             ))}
           </div>
@@ -290,13 +305,13 @@ export default function LandingPage() {
       </section>
 
       {/* ════ SECTION 5 — TECHNOLOGY STACK ════════════════════════ */}
-      <section className="relative border-t border-white/[0.05]">
+      <section className="relative border-t border-border dark:border-white/[0.05]">
         <div className="max-w-7xl mx-auto px-6 py-20">
           <motion.div {...reveal} className="max-w-2xl mb-10">
-            <p className="font-mono text-2xs font-semibold uppercase tracking-[0.2em] text-bronze-300 mb-3">
+            <p className="font-mono text-2xs font-semibold uppercase tracking-[0.2em] text-bronze-700 dark:text-bronze-300 mb-3">
               Technology stack
             </p>
-            <h2 className="font-display text-2xl sm:text-3xl font-semibold tracking-tight text-stone-100">
+            <h2 className="font-display text-2xl sm:text-3xl font-semibold tracking-tight text-foreground">
               Production-grade, end to end.
             </h2>
           </motion.div>
@@ -318,12 +333,12 @@ export default function LandingPage() {
                 key={t.name}
                 {...reveal}
                 transition={{ ...reveal.transition, delay: i * 0.04 }}
-                className="rounded-lg border border-white/[0.07] bg-white/[0.025] px-4 py-3.5 flex items-center gap-3 hover:border-sage-600/40 hover:bg-sage-900/15 transition-colors"
+                className="rounded-lg border border-border bg-surface shadow-card hover:border-sage-400 hover:bg-sage-50 dark:border-white/[0.07] dark:bg-white/[0.025] dark:shadow-none dark:hover:border-sage-600/40 dark:hover:bg-sage-900/15 px-4 py-3.5 flex items-center gap-3 transition-colors"
               >
-                <t.icon className="h-4 w-4 text-sage-400 shrink-0" strokeWidth={1.75} />
+                <t.icon className="h-4 w-4 text-sage-700 dark:text-sage-400 shrink-0" strokeWidth={1.75} />
                 <div className="min-w-0">
-                  <p className="font-mono text-xs font-semibold text-stone-200 truncate">{t.name}</p>
-                  <p className="font-mono text-2xs text-stone-500 truncate">{t.role}</p>
+                  <p className="font-mono text-xs font-semibold text-foreground truncate">{t.name}</p>
+                  <p className="font-mono text-2xs text-foreground-subtle truncate">{t.role}</p>
                 </div>
               </motion.div>
             ))}
@@ -332,16 +347,16 @@ export default function LandingPage() {
       </section>
 
       {/* ════ SECTION 6 — SYSTEM ARCHITECTURE ═════════════════════ */}
-      <section id="architecture" className="relative border-t border-white/[0.05]">
+      <section id="architecture" className="relative border-t border-border dark:border-white/[0.05]">
         <div className="max-w-7xl mx-auto px-6 py-20">
           <motion.div {...reveal} className="max-w-2xl mb-10">
-            <p className="font-mono text-2xs font-semibold uppercase tracking-[0.2em] text-sage-400 mb-3">
+            <p className="font-mono text-2xs font-semibold uppercase tracking-[0.2em] text-sage-700 dark:text-sage-400 mb-3">
               System architecture
             </p>
-            <h2 className="font-display text-2xl sm:text-3xl font-semibold tracking-tight text-stone-100">
+            <h2 className="font-display text-2xl sm:text-3xl font-semibold tracking-tight text-foreground">
               Five layers, one evidence chain.
             </h2>
-            <p className="mt-2 text-sm text-stone-500">Select a layer to inspect it.</p>
+            <p className="mt-2 text-sm text-foreground-subtle">Select a layer to inspect it.</p>
           </motion.div>
 
           <motion.div {...reveal}>
@@ -351,13 +366,13 @@ export default function LandingPage() {
       </section>
 
       {/* ════ SECTION 7 — CONSOLE PREVIEW ═════════════════════════ */}
-      <section className="relative border-t border-white/[0.05]">
+      <section className="relative border-t border-border dark:border-white/[0.05]">
         <div className="max-w-7xl mx-auto px-6 py-20">
           <motion.div {...reveal} className="max-w-2xl mb-10">
-            <p className="font-mono text-2xs font-semibold uppercase tracking-[0.2em] text-peach-400 mb-3">
+            <p className="font-mono text-2xs font-semibold uppercase tracking-[0.2em] text-peach-700 dark:text-peach-400 mb-3">
               Inside the console
             </p>
-            <h2 className="font-display text-2xl sm:text-3xl font-semibold tracking-tight text-stone-100">
+            <h2 className="font-display text-2xl sm:text-3xl font-semibold tracking-tight text-foreground">
               Four operational surfaces. Zero dashboards.
             </h2>
           </motion.div>
@@ -396,16 +411,16 @@ export default function LandingPage() {
       </section>
 
       {/* ════ SECTION 8 — FINAL CTA ═══════════════════════════════ */}
-      <section className="relative border-t border-white/[0.05]">
+      <section className="relative border-t border-border dark:border-white/[0.05]">
         <div className="max-w-4xl mx-auto px-6 py-24 text-center">
           <motion.div {...reveal}>
             <div className="mx-auto mb-6 flex h-12 w-12 items-center justify-center rounded-2xl bg-sage-800 ring-1 ring-sage-500/40 shadow-glow-sage">
               <Fingerprint className="h-5 w-5 text-sand-100" />
             </div>
-            <h2 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight text-stone-100">
+            <h2 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight text-foreground">
               The road is already being read.
             </h2>
-            <p className="mt-3 text-sm text-stone-400 max-w-xl mx-auto">
+            <p className="mt-3 text-sm text-foreground-muted max-w-xl mx-auto">
               Step into the Pune Regional Surveillance Network — live feeds,
               forensic evidence, and the enforcement queue, in one command center.
             </p>
@@ -423,8 +438,8 @@ export default function LandingPage() {
         </div>
 
         {/* Footer */}
-        <footer className="border-t border-white/[0.05]">
-          <div className="max-w-7xl mx-auto px-6 py-6 flex flex-wrap items-center justify-between gap-3 font-mono text-2xs uppercase tracking-[0.14em] text-stone-600">
+        <footer className="border-t border-border dark:border-white/[0.05]">
+          <div className="max-w-7xl mx-auto px-6 py-6 flex flex-wrap items-center justify-between gap-3 font-mono text-2xs uppercase tracking-[0.14em] text-foreground-subtle">
             <span>VAAHAN AI · Pune Regional Surveillance Network · Smart City Pilot</span>
             <span className="flex items-center gap-2">
               <ShieldCheck className="h-3 w-3" />
@@ -463,7 +478,7 @@ function HeroPipeline() {
   );
 
   return (
-    <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] overflow-hidden">
+    <div className="rounded-2xl border border-stone-700/60 overflow-hidden shadow-card-lg" style={{ background: "#16130f" }}>
       <div className="flex items-center justify-between px-5 py-2.5 border-b border-white/[0.06]">
         <span className="flex items-center gap-2 font-mono text-2xs font-semibold uppercase tracking-[0.16em] text-stone-400">
           <span className="relative flex h-1.5 w-1.5">
@@ -623,7 +638,7 @@ function ArchitectureDiagram() {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] gap-4">
       {/* Layer stack */}
-      <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-4 space-y-2">
+      <div className="rounded-xl border border-border bg-surface shadow-card dark:border-white/[0.07] dark:bg-white/[0.02] dark:shadow-none p-4 space-y-2">
         {LAYERS.map((l, i) => {
           const active = i === selected;
           const Icon = l.icon;
@@ -634,19 +649,19 @@ function ArchitectureDiagram() {
               className={cn(
                 "w-full text-left rounded-lg border px-4 py-3 transition-all duration-200 group",
                 active
-                  ? "border-sage-500/50 bg-sage-900/30 shadow-glow-sage"
-                  : "border-white/[0.06] bg-white/[0.015] hover:border-white/[0.14]"
+                  ? "border-sage-500/60 bg-sage-100/70 shadow-glow-sage dark:bg-sage-900/30"
+                  : "border-border bg-surface hover:border-border-strong dark:border-white/[0.06] dark:bg-white/[0.015] dark:hover:border-white/[0.14]"
               )}
             >
               <div className="flex items-center gap-3">
-                <Icon className={cn("h-4 w-4 shrink-0", active ? "text-sage-300" : "text-stone-500")} strokeWidth={1.75} />
+                <Icon className={cn("h-4 w-4 shrink-0", active ? "text-sage-700 dark:text-sage-300" : "text-foreground-subtle")} strokeWidth={1.75} />
                 <span className={cn(
                   "font-mono text-2xs font-bold tracking-[0.16em] w-20 shrink-0",
-                  active ? "text-sage-300" : "text-stone-500"
+                  active ? "text-sage-800 dark:text-sage-300" : "text-foreground-subtle"
                 )}>
                   {l.label}
                 </span>
-                <span className={cn("text-sm font-medium flex-1 min-w-0 truncate", active ? "text-stone-100" : "text-stone-400")}>
+                <span className={cn("text-sm font-medium flex-1 min-w-0 truncate", active ? "text-foreground" : "text-foreground-muted")}>
                   {l.title}
                 </span>
                 <div className="hidden sm:flex items-center gap-1.5">
@@ -655,7 +670,7 @@ function ArchitectureDiagram() {
                       key={n}
                       className={cn(
                         "font-mono text-[0.5625rem] px-1.5 py-0.5 rounded border whitespace-nowrap",
-                        active ? "border-sage-700/60 text-sage-300/90" : "border-white/[0.07] text-stone-600"
+                        active ? "border-sage-400 text-sage-800 dark:border-sage-700/60 dark:text-sage-300/90" : "border-border text-foreground-subtle dark:border-white/[0.07]"
                       )}
                     >
                       {n}
@@ -669,7 +684,7 @@ function ArchitectureDiagram() {
       </div>
 
       {/* Inspector */}
-      <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-5 flex flex-col">
+      <div className="rounded-xl border border-border bg-surface shadow-card dark:border-white/[0.07] dark:bg-white/[0.02] dark:shadow-none p-5 flex flex-col">
         <AnimatePresence mode="wait">
           <motion.div
             key={layer.key}
@@ -679,19 +694,19 @@ function ArchitectureDiagram() {
             transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
             className="flex-1"
           >
-            <p className="font-mono text-2xs font-bold tracking-[0.18em] text-sage-400">{layer.label}</p>
-            <h3 className="mt-1 font-display text-lg font-semibold text-stone-100">{layer.title}</h3>
-            <p className="mt-3 text-sm leading-relaxed text-stone-400">{layer.body}</p>
+            <p className="font-mono text-2xs font-bold tracking-[0.18em] text-sage-700 dark:text-sage-400">{layer.label}</p>
+            <h3 className="mt-1 font-display text-lg font-semibold text-foreground">{layer.title}</h3>
+            <p className="mt-3 text-sm leading-relaxed text-foreground-muted">{layer.body}</p>
             <div className="mt-4 flex flex-wrap gap-1.5">
               {layer.nodes.map((n) => (
-                <span key={n} className="font-mono text-2xs px-2 py-1 rounded-md border border-sage-700/50 bg-sage-900/25 text-sage-300">
+                <span key={n} className="font-mono text-2xs px-2 py-1 rounded-md border border-sage-300 bg-sage-100/70 text-sage-800 dark:border-sage-700/50 dark:bg-sage-900/25 dark:text-sage-300">
                   {n}
                 </span>
               ))}
             </div>
           </motion.div>
         </AnimatePresence>
-        <p className="mt-4 pt-3 border-t border-white/[0.06] font-mono text-2xs text-stone-600 uppercase tracking-[0.14em]">
+        <p className="mt-4 pt-3 border-t border-border dark:border-white/[0.06] font-mono text-2xs text-foreground-subtle uppercase tracking-[0.14em]">
           One evidence chain · camera to court
         </p>
       </div>
@@ -709,19 +724,19 @@ function PreviewCard({ title, caption, delay, children }: {
     <motion.div
       {...reveal}
       transition={{ ...reveal.transition, delay }}
-      className="group rounded-xl border border-white/[0.07] bg-white/[0.02] overflow-hidden hover:border-sage-600/40 transition-colors"
+      className="group rounded-xl border border-border bg-surface shadow-card hover:border-sage-400 dark:border-white/[0.07] dark:bg-white/[0.02] dark:shadow-none dark:hover:border-sage-600/40 overflow-hidden transition-colors"
     >
       <Link href="/login" className="block">
-        <div className="relative aspect-[16/8] bg-[#0c0a08] border-b border-white/[0.06] p-3 overflow-hidden">
+        <div className="relative aspect-[16/8] bg-[#0c0a08] border-b border-stone-800/80 dark:border-white/[0.06] p-3 overflow-hidden">
           {children}
           <div className="absolute inset-0 bg-gradient-to-t from-[#0c0a08]/60 to-transparent pointer-events-none" />
         </div>
         <div className="px-4 py-3 flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-stone-200">{title}</p>
-            <p className="mt-0.5 text-2xs text-stone-500 truncate">{caption}</p>
+            <p className="text-sm font-semibold text-foreground">{title}</p>
+            <p className="mt-0.5 text-2xs text-foreground-subtle truncate">{caption}</p>
           </div>
-          <ArrowRight className="h-4 w-4 text-stone-600 group-hover:text-sage-400 group-hover:translate-x-0.5 transition-all shrink-0" />
+          <ArrowRight className="h-4 w-4 text-foreground-subtle group-hover:text-sage-700 dark:group-hover:text-sage-400 group-hover:translate-x-0.5 transition-all shrink-0" />
         </div>
       </Link>
     </motion.div>

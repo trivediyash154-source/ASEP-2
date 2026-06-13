@@ -6,9 +6,10 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 import { AlertTriangle, Radio, ShieldCheck } from "lucide-react";
 
-import { analyticsApi } from "@/lib/api/endpoints";
+import { analyticsApi, detectionsApi } from "@/lib/api/endpoints";
 import { useWebSocket } from "@/lib/hooks/useWebSocket";
 import { cn } from "@/lib/utils";
+import type { Detection } from "@/lib/types";
 
 import { PuneIntelMap, PUNE_TOTALS } from "./PuneIntelMap";
 
@@ -55,6 +56,27 @@ export function IntelligenceCanvas({ className }: { className?: string }) {
     staleTime: 15_000,
   });
 
+  // Memory seed — the tape and ticker start from the evidence archive
+  // instead of sitting blank until the first live read arrives.
+  const { data: seed } = useQuery({
+    queryKey: ["detections", "canvas-seed"],
+    queryFn: () => detectionsApi.recent(OCR_TAPE_LEN).then((r) => r.data as Detection[]),
+    staleTime: 60_000,
+  });
+  const seedEvents: TickerEvent[] = (seed ?? [])
+    .filter((d) => d.detected_plate)
+    .map((d) => ({
+      id: d.id,
+      type: "detection",
+      plate: d.detected_plate,
+      is_violation: d.is_violation,
+      violation_type: d.violation_type,
+      ocr_confidence: d.ocr_confidence,
+      camera_location: "evidence archive",
+    }));
+  const shownLatest = latest ?? seedEvents[0] ?? null;
+  const shownTape = tape.length > 0 ? tape : seedEvents;
+
   const rows = (timeline ?? []).map((r) => ({
     label: new Date(r.hour).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false }),
     compliant: Math.max(0, r.total - r.violations),
@@ -79,31 +101,31 @@ export function IntelligenceCanvas({ className }: { className?: string }) {
       {/* Latest AI read ticker */}
       <div className="shrink-0 border-t border-border px-4 py-2 min-h-[44px] flex items-center overflow-hidden">
         <AnimatePresence mode="wait">
-          {latest ? (
+          {shownLatest ? (
             <motion.div
-              key={latest.id}
+              key={shownLatest.id}
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
               className="flex items-center gap-3 min-w-0 w-full"
             >
-              {latest.is_violation
+              {shownLatest.is_violation
                 ? <AlertTriangle className="h-3.5 w-3.5 text-threat-high shrink-0" />
                 : <ShieldCheck className="h-3.5 w-3.5 text-threat-clear shrink-0" />}
-              <span className="plate-chip text-[0.6875rem] py-0 shrink-0">{latest.plate ?? "—"}</span>
+              <span className="plate-chip text-[0.6875rem] py-0 shrink-0">{shownLatest.plate ?? "—"}</span>
               <span className={cn(
                 "font-mono text-2xs font-semibold uppercase tracking-[0.08em] shrink-0",
-                latest.is_violation ? "text-threat-high" : "text-threat-clear"
+                shownLatest.is_violation ? "text-threat-high" : "text-threat-clear"
               )}>
-                {latest.is_violation ? (latest.violation_type ?? "violation").replace(/_/g, " ") : "clear"}
+                {shownLatest.is_violation ? (shownLatest.violation_type ?? "violation").replace(/_/g, " ") : "clear"}
               </span>
               <span className="font-mono text-2xs text-foreground-subtle truncate flex-1">
-                {latest.camera_location ?? latest.camera_name ?? ""}
+                {shownLatest.camera_location ?? shownLatest.camera_name ?? ""}
               </span>
-              {latest.ocr_confidence != null && (
+              {shownLatest.ocr_confidence != null && (
                 <span className="font-mono text-2xs text-foreground-subtle tabular-nums shrink-0">
-                  OCR {Math.round(latest.ocr_confidence * 100)}%
+                  OCR {Math.round(shownLatest.ocr_confidence * 100)}%
                 </span>
               )}
             </motion.div>
@@ -126,12 +148,12 @@ export function IntelligenceCanvas({ className }: { className?: string }) {
           OCR Tape
         </span>
         <span className="h-3 w-px bg-border shrink-0" aria-hidden />
-        {tape.length === 0 ? (
+        {shownTape.length === 0 ? (
           <span className="font-mono text-2xs text-foreground-subtle/60">— — —</span>
         ) : (
           <div className="flex items-center gap-1.5 overflow-hidden">
             <AnimatePresence initial={false}>
-              {tape.map((t, i) => (
+              {shownTape.map((t, i) => (
                 <motion.span
                   key={t.id}
                   layout="position"

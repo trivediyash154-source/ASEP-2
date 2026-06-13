@@ -3,6 +3,7 @@
 import { motion } from "framer-motion";
 
 import { CommandStatusBar } from "./CommandStatusBar";
+import { SituationBriefing } from "./SituationBriefing";
 import { CommandReadout } from "./CommandReadout";
 import { ThreatFeed } from "./ThreatFeed";
 import { IntelligenceCanvas } from "./IntelligenceCanvas";
@@ -44,7 +45,10 @@ export function CommandCenterView() {
         <motion.div {...enter(0)} className="shrink-0">
           <CommandStatusBar />
         </motion.div>
-        <motion.div {...enter(0.05)} className="shrink-0">
+        <motion.div {...enter(0.03)} className="shrink-0">
+          <SituationBriefing />
+        </motion.div>
+        <motion.div {...enter(0.06)} className="shrink-0">
           <CommandReadout compact />
         </motion.div>
 

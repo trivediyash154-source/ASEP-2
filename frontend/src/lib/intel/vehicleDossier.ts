@@ -64,13 +64,14 @@ const VEHICLES = [
 
 const COLORS = ["Pearl White", "Mineral Silver", "Galaxy Black", "Marine Blue", "Sunset Bronze", "Mahogany"];
 
+// Pilot theatre is Pune — registered owners resolve to local addresses
 const AREAS = [
-  "Bandra West, Mumbai · 400050",
-  "Andheri East, Mumbai · 400069",
   "Koregaon Park, Pune · 411001",
-  "Indiranagar, Bengaluru · 560038",
-  "Hauz Khas, New Delhi · 110016",
-  "Salt Lake, Kolkata · 700091",
+  "Kothrud, Pune · 411038",
+  "Baner, Pune · 411045",
+  "Shivajinagar, Pune · 411005",
+  "Pimpri-Chinchwad, Pune · 411018",
+  "Wakad, Pune · 411057",
 ];
 
 const VIOLATIONS = [

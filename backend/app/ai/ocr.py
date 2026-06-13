@@ -32,6 +32,20 @@ logger = get_logger(__name__)
 OCR_MIN_CONFIDENCE = 0.35
 # If primary read confidence is below this, run secondary engine too
 CONFIDENCE_UPGRADE_THRESHOLD = 0.65
+# Hard cap on the longest side of any image handed to EasyOCR.
+#
+# EasyOCR's CRAFT text-detector runs over the WHOLE image, and on CPU its cost
+# scales with pixel area. A raw IP-Webcam frame (e.g. 1613x605) with the slow
+# beam-search decoder took ~21s PER PASS — long enough to starve the asyncio
+# event loop (it holds the GIL), which is what made the whole backend appear to
+# "crash" / force re-login during a live demo. A plate is fully legible far
+# below this cap, so downscaling costs us no accuracy but ~20-50x the speed.
+OCR_MAX_SIDE = 960
+# Plates only ever contain A-Z and 0-9. Constraining EasyOCR to this character
+# set is the single biggest accuracy win for plate reading: it stops the model
+# from ever emitting lowercase, punctuation, or whitespace, which removes a huge
+# class of misreads and makes the normalizer's job deterministic.
+_PLATE_ALLOWLIST = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 # Indian state codes — used to validate the first two characters
 VALID_STATE_CODES = {
     "AP", "AR", "AS", "BR", "CG", "GA", "GJ", "HR", "HP", "JH",
@@ -159,6 +173,18 @@ class PlateOCR:
         if not all_candidates and self._tesseract_available:
             all_candidates.extend(self._run_tesseract(plate_image))
 
+        # Recover a valid plate hidden inside an over-long read: OCR often
+        # absorbs the plate's border or a stray mark as a leading/trailing
+        # char (e.g. 'IDL3CAB5678' or 'MH05ZZ69691'). Add trimmed variants
+        # that DO validate so they can win the ranking below.
+        for c in list(all_candidates):
+            if not c.is_valid_format:
+                for sub in _valid_plate_variants(c.normalized):
+                    all_candidates.append(
+                        OCRCandidate(text=sub, confidence=c.confidence * 0.97,
+                                     engine=f"{c.engine}+trim")
+                    )
+
         ms = round((time.perf_counter() - t0) * 1000, 2)
 
         if not all_candidates:
@@ -179,8 +205,11 @@ class PlateOCR:
                 processing_time_ms=ms,
             )
 
-        # Rank by composite quality score
-        all_candidates.sort(key=lambda c: c.quality_score, reverse=True)
+        # Rank by composite quality score, but a valid-format plate ALWAYS beats
+        # an invalid one on a tie — the quality score caps at 1.0, so without this
+        # tiebreaker an over-long invalid read (e.g. 'MH05ZZ69691') could edge out
+        # its own recovered valid form ('MH05ZZ6969').
+        all_candidates.sort(key=lambda c: (c.is_valid_format, c.quality_score), reverse=True)
         best = all_candidates[0]
 
         logger.info(
@@ -260,20 +289,54 @@ class PlateOCR:
 
     def _run_easyocr(self, image: np.ndarray) -> List[OCRCandidate]:
         try:
+            image = _cap_image_size(image, OCR_MAX_SIDE)
             results = self._easy_reader.readtext(
                 image,
                 detail=1,
                 paragraph=False,
+                allowlist=_PLATE_ALLOWLIST,
                 text_threshold=0.5,
                 low_text=0.3,
                 width_ths=1.0,
-                decoder="beamsearch",
+                # `greedy` is ~5-10x faster than `beamsearch` on CPU with
+                # negligible accuracy loss for short plate strings; `canvas_size`
+                # + `mag_ratio` stop EasyOCR from re-inflating the image we just
+                # capped. Together these turn a ~21s pass into well under 1s.
+                decoder="greedy",
+                canvas_size=OCR_MAX_SIDE,
+                mag_ratio=1.0,
             )
-            candidates = []
-            for (_, text, conf) in results:
-                if conf < OCR_MIN_CONFIDENCE or len(text.strip()) < 4:
+            candidates: List[OCRCandidate] = []
+            fragments: List[Tuple[float, float, str, float]] = []  # (x, y, text, conf)
+            for (box, text, conf) in results:
+                t = text.strip()
+                if not t:
                     continue
-                candidates.append(OCRCandidate(text=text, confidence=conf, engine="easyocr"))
+                # Keep every fragment (even short/low-conf) for the stitch step.
+                try:
+                    xs = [p[0] for p in box]
+                    ys = [p[1] for p in box]
+                    fragments.append((min(xs), min(ys), t, float(conf)))
+                except Exception:
+                    fragments.append((0.0, 0.0, t, float(conf)))
+                if conf < OCR_MIN_CONFIDENCE or len(t) < 4:
+                    continue
+                candidates.append(OCRCandidate(text=t, confidence=conf, engine="easyocr"))
+
+            # EasyOCR frequently splits a single plate into 2-3 detection boxes
+            # ("MH05" + "ZZ" + "6969"), and none of those fragments validates as a
+            # full plate on its own — which shows up as "it didn't scan". Stitch
+            # the fragments back together in reading order (top-to-bottom rows,
+            # then left-to-right) and offer that as an additional candidate.
+            if len(fragments) >= 2 and not any(c.is_valid_format for c in candidates):
+                ordered = sorted(fragments, key=lambda f: (round(f[1] / 20.0), f[0]))
+                combined = "".join(f[2] for f in ordered)
+                alnum_len = sum(c.isalnum() for c in combined)
+                if 6 <= alnum_len <= 13:
+                    avg_conf = sum(f[3] for f in ordered) / len(ordered)
+                    candidates.append(
+                        OCRCandidate(text=combined, confidence=avg_conf, engine="easyocr+merge")
+                    )
             return candidates
         except Exception as e:
             logger.error("easyocr_read_error", error=str(e))
@@ -320,6 +383,28 @@ class PlateOCR:
     @property
     def engines_loaded(self) -> List[str]:
         return list(self._engines_loaded)
+
+
+# ── Image size guard ──────────────────────────────────────────────
+
+
+def _cap_image_size(image: np.ndarray, max_side: int) -> np.ndarray:
+    """Downscale so the longest side is <= ``max_side``; never upscale.
+
+    This is the single most important guard against the event-loop-starving
+    multi-second OCR pass: it bounds the pixel area EasyOCR's detector has to
+    process regardless of the source camera's resolution.
+    """
+    if image is None or image.size == 0:
+        return image
+    h, w = image.shape[:2]
+    longest = max(h, w)
+    if longest <= max_side:
+        return image
+    scale = max_side / float(longest)
+    new_w = max(1, int(round(w * scale)))
+    new_h = max(1, int(round(h * scale)))
+    return cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_AREA)
 
 
 # ── Text normalization ────────────────────────────────────────────
@@ -451,7 +536,11 @@ def _normalize_plate(text: str) -> str:
                 best_p = min_p
                 best_score = -9999
 
-                strongly_letters = set("ACDEFHJKLMNOPQRTUVWXY")
+                # Exclude digit-confusable letters (B G I S Z already, plus O D Q
+                # which look like 0) from the "strong letter" vote, so an 'O' in
+                # the trailing number doesn't drag the series/number split the
+                # wrong way (e.g. RJ14CV0002 misread 'CVO002' -> 'CV' + '0002').
+                strongly_letters = set("ACEFHJKLMNPRTUVWXY")
                 strongly_digits = set("0123456789")
 
                 for p in range(min_p, max_p + 1):
@@ -493,6 +582,33 @@ def _normalize_plate(text: str) -> str:
                     chars[i] = CHAR_FIXES_DIGIT_POSITIONS.get(chars[i], chars[i])
 
     return "".join(chars)
+
+
+def _valid_plate_variants(normalized: str) -> List[str]:
+    """Return trimmed substrings of `normalized` that ARE valid plate formats.
+
+    Handles OCR absorbing the plate's border or a stray mark as up to two extra
+    leading/trailing characters, e.g. 'IDL3CAB5678' -> 'DL3CAB5678' or
+    'MH05ZZ69691' -> 'MH05ZZ6969'. Only valid variants are returned, so this can
+    never invent a plate — it only recovers one already present in the read.
+    """
+    s = normalized or ""
+    n = len(s)
+    if n < 6:
+        return []
+    seen: set[str] = set()
+    out: List[str] = []
+    for a in range(3):
+        for b in range(3):
+            if a + b == 0 or n - a - b < 6:
+                continue
+            sub = s[a:n - b]
+            if sub in seen:
+                continue
+            seen.add(sub)
+            if PLATE_REGEX.match(sub) or _is_bh_series(sub) or _is_morth_temp_series(sub):
+                out.append(sub)
+    return out
 
 
 # Module-level singleton

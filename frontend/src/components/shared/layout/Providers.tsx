@@ -54,10 +54,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <ErrorBoundary>
-      {/* Dark is the canonical command-center experience; storageKey is
-          versioned so the dark default applies even where an older "light"
-          preference was persisted. Light remains available via the toggle. */}
-      <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} storageKey="vaahan-theme-v2" disableTransitionOnChange={false}>
+      {/* Premium light is the default first impression; cinematic dark is
+          one toggle away. storageKey is versioned so the new default applies
+          even where an older preference was persisted. */}
+      <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false} storageKey="vaahan-theme-v3" disableTransitionOnChange={false}>
         <QueryClientProvider client={queryClient}>
           <TooltipProvider delayDuration={200} skipDelayDuration={120}>
             {children}

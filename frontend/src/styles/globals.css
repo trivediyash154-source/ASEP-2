@@ -10,46 +10,48 @@
 
 @layer base {
   :root {
-    /* ── Surface system (warm-tinted neutrals) ─────────────────── */
-    --background: 40 22% 97%;
-    --surface: 0 0% 100%;
-    --surface-elevated: 0 0% 100%;
-    --surface-sunken: 40 18% 95%;
+    /* ── PREMIUM GOVERNMENT LIGHT — warm paper command surface ───
+       Background #F7F4EE · Surface #FFFDF8 · Primary #7F8876
+       Secondary #A9B394 · Accent #BD8658 · Highlight #ED9F7E    */
+    --background: 40 36% 95%;            /* #F7F4EE warm paper */
+    --surface: 43 100% 99%;              /* #FFFDF8 cream surface */
+    --surface-elevated: 43 100% 99%;
+    --surface-sunken: 40 30% 92%;        /* sunken wells, warm */
 
     /* ── Foreground hierarchy ──────────────────────────────────── */
-    --foreground: 60 6% 10%;
-    --foreground-muted: 50 5% 36%;
-    --foreground-subtle: 40 5% 49%;
+    --foreground: 60 8% 11%;
+    --foreground-muted: 50 6% 34%;
+    --foreground-subtle: 40 6% 46%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 60 6% 10%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 60 6% 10%;
+    --card: 43 100% 99%;
+    --card-foreground: 60 8% 11%;
+    --popover: 43 100% 99%;
+    --popover-foreground: 60 8% 11%;
 
     /* ── Brand semantic ────────────────────────────────────────── */
-    --primary: 90 7% 40%;
+    --primary: 90 7% 44%;                /* #7F8876 family, AA on white */
     --primary-foreground: 0 0% 100%;
-    --secondary: 79 17% 64%;
+    --secondary: 79 17% 64%;             /* #A9B394 */
     --secondary-foreground: 90 12% 18%;
 
-    --accent: 17 76% 71%;
-    --accent-foreground: 22 50% 18%;
+    --accent: 27 43% 54%;                /* #BD8658 bronze */
+    --accent-foreground: 0 0% 100%;
 
-    --highlight: 25 41% 54%;
-    --highlight-foreground: 0 0% 100%;
+    --highlight: 18 75% 71%;             /* #ED9F7E peach */
+    --highlight-foreground: 22 50% 18%;
 
     /* ── Subtle slots ──────────────────────────────────────────── */
-    --muted: 40 14% 94%;
-    --muted-foreground: 50 5% 36%;
+    --muted: 40 26% 93%;
+    --muted-foreground: 50 6% 34%;
 
     /* ── Status ────────────────────────────────────────────────── */
     --destructive: 0 35% 53%;
     --destructive-foreground: 0 0% 100%;
 
-    /* ── Lines / borders ───────────────────────────────────────── */
-    --border: 45 12% 88%;
-    --border-strong: 45 10% 78%;
-    --input: 45 12% 88%;
+    /* ── Lines / borders (warm hairlines, slightly crisper) ────── */
+    --border: 40 20% 86%;
+    --border-strong: 40 16% 75%;
+    --input: 40 20% 86%;
     --ring: 90 12% 42%;
 
     --radius: 0.625rem;
@@ -60,39 +62,6 @@
     --threat-medium: 35 65% 48%;
     --threat-high: 17 70% 55%;
     --threat-critical: 0 60% 48%;
-  }
-
-  /* ── Light token scope — pins light values under a dark <html>.
-        Used by the auth route, whose art direction is light-only. ── */
-  .theme-light-scope {
-    --background: 40 22% 97%;
-    --surface: 0 0% 100%;
-    --surface-elevated: 0 0% 100%;
-    --surface-sunken: 40 18% 95%;
-    --foreground: 60 6% 10%;
-    --foreground-muted: 50 5% 36%;
-    --foreground-subtle: 40 5% 49%;
-    --card: 0 0% 100%;
-    --card-foreground: 60 6% 10%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 60 6% 10%;
-    --primary: 90 7% 40%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 79 17% 64%;
-    --secondary-foreground: 90 12% 18%;
-    --accent: 17 76% 71%;
-    --accent-foreground: 22 50% 18%;
-    --highlight: 25 41% 54%;
-    --highlight-foreground: 0 0% 100%;
-    --muted: 40 14% 94%;
-    --muted-foreground: 50 5% 36%;
-    --destructive: 0 35% 53%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 45 12% 88%;
-    --border-strong: 45 10% 78%;
-    --input: 45 12% 88%;
-    --ring: 90 12% 42%;
-    color: hsl(var(--foreground));
   }
 
   /* ── CINEMATIC GOVERNMENT DARK ─────────────────────────────── */
@@ -153,9 +122,15 @@
     font-feature-settings: "cv11" on, "ss01" on, "ss03" on;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    /* Light atmosphere — same living layered-glow language as dark,
+       tuned for warm paper: sage bloom NW, bronze wash NE, peach floor */
     background-image:
-      radial-gradient(rgba(101, 70, 41, 0.018) 1px, transparent 1px);
-    background-size: 22px 22px;
+      radial-gradient(ellipse 900px 600px at 12% -8%, rgba(127, 136, 118, 0.08), transparent 60%),
+      radial-gradient(ellipse 800px 520px at 105% 12%, rgba(189, 134, 88, 0.06), transparent 55%),
+      radial-gradient(ellipse 1100px 700px at 50% 115%, rgba(237, 159, 126, 0.06), transparent 60%),
+      radial-gradient(rgba(101, 70, 41, 0.02) 1px, transparent 1px);
+    background-size: 100% 100%, 100% 100%, 100% 100%, 22px 22px;
+    background-attachment: fixed, fixed, fixed, scroll;
   }
   /* Cinematic dark atmosphere — layered ambient glows + grain + vignette.
      Fixed attachment keeps the light sources stable while content scrolls. */
@@ -259,11 +234,12 @@
 
   /* ── Operational surface — command center panels ──────────────── */
   .op-surface {
-    @apply bg-surface border border-border rounded-xl overflow-hidden;
+    @apply border border-border rounded-xl overflow-hidden;
+    background: linear-gradient(180deg, hsl(43 100% 99%) 0%, hsl(42 55% 97.5%) 100%);
     box-shadow:
-      0 1px 2px rgba(45, 51, 34, 0.04),
-      0 4px 12px rgba(45, 51, 34, 0.04),
-      inset 0 1px 0 rgba(255,255,255,0.5);
+      0 1px 2px rgba(74, 53, 32, 0.05),
+      0 6px 18px -4px rgba(74, 53, 32, 0.07),
+      inset 0 1px 0 rgba(255, 255, 255, 0.85);
   }
   .dark .op-surface {
     background: linear-gradient(180deg, hsl(35 12% 12.5%) 0%, hsl(35 12% 10.5%) 100%);

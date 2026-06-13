@@ -93,8 +93,13 @@ services:
       # during a VIP demo. The DEMO_* flags drive Phase-1 guaranteed results +
       # staged plates (see app/services/staged_plates.py). Override in .env if needed.
       LIVE_ACTIVITY_ENABLED: "false"
-      DEMO_GUARANTEE_RESULT: "true"
-      DEMO_STAGED_PLATES: "true"
+      # HONEST LIVE SCANNING: both OFF so the live camera shows the REAL OCR read
+      # and never a fabricated/substituted plate. Flip back to "true" ONLY for a
+      # scripted stakeholder demo where you hold up the 3 printed staged plates
+      # (see app/services/staged_plates.py). GUARANTEE invents a valid-looking
+      # plate when OCR is unsure; STAGED swaps the read for a scripted plate.
+      DEMO_GUARANTEE_RESULT: "false"
+      DEMO_STAGED_PLATES: "false"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:

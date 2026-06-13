@@ -39,6 +39,11 @@ def preprocess_plate_crop(plate_crop: np.ndarray) -> np.ndarray:
     if plate_crop is None or plate_crop.size == 0:
         raise ValueError("Empty plate crop received")
 
+    # Cap the longest side FIRST. The handheld-plate fallback can hand us a
+    # full camera frame (e.g. 1613x605); running OCR + CLAHE on that is what
+    # froze the backend for ~20s per pass. A plate stays legible far below this.
+    plate_crop = _cap_longest_side(plate_crop, max_side=960)
+
     h = plate_crop.shape[0]
     # EasyOCR likes a glyph height of roughly 32–96px. Upscale anything
     # shorter than 64px; leave already-large crops alone (downscaling a
@@ -47,6 +52,19 @@ def preprocess_plate_crop(plate_crop: np.ndarray) -> np.ndarray:
         plate_crop = _resize_to_standard(plate_crop, target_height=96)
 
     return _gentle_contrast(plate_crop)
+
+
+def _cap_longest_side(img: np.ndarray, max_side: int = 960) -> np.ndarray:
+    """Downscale so the longest side is <= ``max_side``; never upscale."""
+    h, w = img.shape[:2]
+    longest = max(h, w)
+    if longest <= max_side:
+        return img
+    scale = max_side / float(longest)
+    return cv2.resize(
+        img, (max(1, int(round(w * scale))), max(1, int(round(h * scale)))),
+        interpolation=cv2.INTER_AREA,
+    )
 
 
 def _gentle_contrast(img: np.ndarray) -> np.ndarray:

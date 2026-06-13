@@ -1,11 +1,14 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
 import { AlertTriangle, ArrowUpRight, ShieldCheck } from "lucide-react";
 
+import { detectionsApi } from "@/lib/api/endpoints";
 import { useWebSocket } from "@/lib/hooks/useWebSocket";
 import { cn, timeAgo } from "@/lib/utils";
+import type { Detection } from "@/lib/types";
 
 interface DetectionEvent {
   id: string;
@@ -46,9 +49,36 @@ export function ThreatFeed({ className }: { className?: string }) {
   });
   const live = status === "connected";
 
+  // The feed remembers: seed from the evidence archive so the wall is
+  // never blank while waiting for the next live event.
+  const { data: archive } = useQuery({
+    queryKey: ["detections", "threat-seed"],
+    queryFn: () => detectionsApi.recent(24).then((r) => r.data as Detection[]),
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+  });
+
+  const merged = useMemo<DetectionEvent[]>(() => {
+    const liveIds = new Set(events.map((e) => e.id));
+    const seeds: DetectionEvent[] = (archive ?? [])
+      .filter((d) => !liveIds.has(d.id))
+      .map((d) => ({
+        id: d.id,
+        type: "detection",
+        plate: d.detected_plate,
+        is_violation: d.is_violation,
+        violation_type: d.violation_type,
+        ocr_confidence: d.ocr_confidence,
+        timestamp: d.timestamp,
+      }));
+    return [...events, ...seeds].slice(0, MAX_ITEMS);
+  }, [events, archive]);
+
+  const violationsShown = merged.filter((e) => e.is_violation).length;
+
   const compliancePct =
-    events.length >= 3
-      ? (events.filter((e) => !e.is_violation).length / events.length) * 100
+    merged.length >= 3
+      ? (merged.filter((e) => !e.is_violation).length / merged.length) * 100
       : null;
 
   return (
@@ -60,12 +90,12 @@ export function ThreatFeed({ className }: { className?: string }) {
             "h-1.5 w-1.5 rounded-full",
             live ? "bg-status-success animate-pulse-soft" : "bg-status-danger"
           )} />
-          {alertCount} alerts
+          {violationsShown} flagged{alertCount > 0 ? ` · ${alertCount} live` : ""}
         </span>
       </header>
 
       <div className="flex-1 min-h-0 overflow-y-auto">
-        {events.length === 0 ? (
+        {merged.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center px-6 py-10 text-center">
             <span className="font-mono text-2xs uppercase tracking-[0.16em] text-foreground-subtle">
               {live ? "Monitoring · no incidents" : "Reconnecting to stream…"}
@@ -74,7 +104,7 @@ export function ThreatFeed({ className }: { className?: string }) {
         ) : (
           <ul>
             <AnimatePresence initial={false}>
-              {events.map((e) =>
+              {merged.map((e) =>
                 e.is_violation ? (
                   <motion.li
                     key={e.id}
@@ -99,7 +129,9 @@ export function ThreatFeed({ className }: { className?: string }) {
                       {(e.violation_type ?? "violation").replace(/_/g, " ")}
                     </p>
                     <p className="mt-0.5 font-mono text-2xs text-foreground-subtle truncate">
-                      {e.camera_code ?? ""} · {e.camera_location ?? e.camera_name ?? "—"}
+                      {[e.camera_code, e.camera_location ?? e.camera_name]
+                        .filter(Boolean)
+                        .join(" · ") || "evidence archive"}
                     </p>
                   </motion.li>
                 ) : (

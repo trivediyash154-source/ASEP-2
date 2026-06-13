@@ -1,0 +1,101 @@
+{
+  "results": [
+    {
+      "case": "CASE1",
+      "desc": "staged/known plate",
+      "intended": "MH12AB1234",
+      "read": "MH12AB1234",
+      "exact": true,
+      "ocr_conf": 0.703,
+      "ocr_attempts": 2,
+      "ocr_modes": [
+        "handheld"
+      ],
+      "ocr_texts_seen": [
+        "MH12AB1234"
+      ],
+      "latency_s": 12.8,
+      "detection_id": "d9a266cf-767d-4ded-bb6d-0f66c4ead822",
+      "outcome": "CLEAR",
+      "risk": 6,
+      "synthetic_profile": false,
+      "staged_profile": true,
+      "owner": "Rahul Naidu",
+      "vehicle": "Skoda Slavia",
+      "db_detection_row": true,
+      "db_plate_text": "MH12AB1234",
+      "db_is_violation": false,
+      "db_violation_type": null,
+      "evidence_frame_file": "/app/uploads/evidence/2026/06/11/audit-cam/d9a266cf-767d-4ded-bb6d-0f66c4ead822_frame.jpg",
+      "evidence_crop_file": "/app/uploads/evidence/2026/06/11/audit-cam/d9a266cf-767d-4ded-bb6d-0f66c4ead822_plate.jpg",
+      "challan": null
+    },
+    {
+      "case": "CASE2",
+      "desc": "unknown plate -> synthetic profile",
+      "intended": "MH05AB6263",
+      "read": "MH05AB6263",
+      "exact": true,
+      "ocr_conf": 0.941,
+      "ocr_attempts": 2,
+      "ocr_modes": [
+        "handheld"
+      ],
+      "ocr_texts_seen": [
+        "MH05AB6263"
+      ],
+      "latency_s": 16.4,
+      "detection_id": "34b05065-4043-4815-a6f1-24fc5722e9d7",
+      "outcome": "WARNING",
+      "risk": 15,
+      "synthetic_profile": true,
+      "staged_profile": false,
+      "owner": "Rahul Gupta",
+      "vehicle": "Suzuki Access 125",
+      "db_detection_row": true,
+      "db_plate_text": "MH05AB6263",
+      "db_is_violation": false,
+      "db_violation_type": "Unregistered Vehicle",
+      "evidence_frame_file": "/app/uploads/evidence/2026/06/11/audit-cam/34b05065-4043-4815-a6f1-24fc5722e9d7_frame.jpg",
+      "evidence_crop_file": "/app/uploads/evidence/2026/06/11/audit-cam/34b05065-4043-4815-a6f1-24fc5722e9d7_plate.jpg",
+      "challan": null
+    },
+    {
+      "case": "CASE3",
+      "desc": "plate-only frame -> handheld fallback",
+      "intended": "KA03MN4567",
+      "read": "KA05MN4567",
+      "exact": false,
+      "ocr_conf": 0.977,
+      "ocr_attempts": 2,
+      "ocr_modes": [
+        "handheld"
+      ],
+      "ocr_texts_seen": [
+        "KA05MN4567"
+      ],
+      "latency_s": 17.0,
+      "detection_id": "d823e8ac-2fc5-4a4d-8022-32b0d6426280",
+      "outcome": "MANUAL_REVIEW",
+      "risk": 20,
+      "synthetic_profile": true,
+      "staged_profile": false,
+      "owner": "Meera Pillai",
+      "vehicle": "Suzuki Access 125",
+      "db_detection_row": true,
+      "db_plate_text": "KA05MN4567",
+      "db_is_violation": false,
+      "db_violation_type": "Manual Verification Required",
+      "evidence_frame_file": "/app/uploads/evidence/2026/06/11/audit-cam/d823e8ac-2fc5-4a4d-8022-32b0d6426280_frame.jpg",
+      "evidence_crop_file": "/app/uploads/evidence/2026/06/11/audit-cam/d823e8ac-2fc5-4a4d-8022-32b0d6426280_plate.jpg",
+      "challan": null
+    }
+  ],
+  "global_events": 3,
+  "global_ids": [
+    "d9a266cf-767d-4ded-bb6d-0f66c4ead822",
+    "34b05065-4043-4815-a6f1-24fc5722e9d7",
+    "d823e8ac-2fc5-4a4d-8022-32b0d6426280"
+  ],
+  "ts": "2026-06-11T19:46:38.586426"
+}

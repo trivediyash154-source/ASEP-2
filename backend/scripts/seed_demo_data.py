@@ -2,7 +2,7 @@
 Realistic demo data seeding.
 
 Populates the platform with a believable Indian city deployment:
-  - ~12 cameras across Mumbai with real coordinates
+  - ~12 cameras across the Pune pilot network with real coordinates
   - ~80 vehicle owners with Indian names/phones
   - ~140 vehicles (MH-plate mix of categories, with realistic expiry distribution)
   - ~900 detections over the past 7 days (recency-weighted)
@@ -35,19 +35,19 @@ SEED_MARKER_ACTION = "demo_data_seeded"
 # ── Reference data ──────────────────────────────────────────────────
 
 CAMERAS_SPEC = [
-    # (name, camera_id, location, lat, lng, status)
-    ("Bandra Worli Sea Link — South", "MUM-BWS-01", "Bandra-Worli Sea Link, S-Tower", 19.0291, 72.8175, CameraStatus.ACTIVE),
-    ("Bandra Worli Sea Link — North", "MUM-BWS-02", "Bandra-Worli Sea Link, N-Tower", 19.0395, 72.8186, CameraStatus.ACTIVE),
-    ("Western Express Hwy — Andheri", "MUM-WEH-04", "Western Express Hwy, Andheri E",   19.1190, 72.8478, CameraStatus.ACTIVE),
-    ("Eastern Express Hwy — Sion",    "MUM-EEH-07", "Eastern Express Hwy, Sion Junction",19.0436, 72.8628, CameraStatus.ACTIVE),
-    ("Marine Drive — Air India",      "MUM-MAR-02", "Marine Drive, opp. Air India Bldg", 18.9438, 72.8237, CameraStatus.ACTIVE),
-    ("Powai Hiranandani Gardens",     "MUM-PHG-01", "Hiranandani Gardens Main Rd",        19.1197, 72.9080, CameraStatus.ACTIVE),
-    ("Thane–Belapur Rd, Vashi",       "MUM-VSH-03", "Thane–Belapur Rd, Vashi Bridge",     19.0760, 72.9990, CameraStatus.ACTIVE),
-    ("Dadar TT Circle",               "MUM-DDR-01", "Dr Ambedkar Rd, Dadar TT",           19.0190, 72.8430, CameraStatus.MAINTENANCE),
-    ("Worli Sea Face",                "MUM-WSF-01", "Worli Sea Face Promenade",            19.0177, 72.8156, CameraStatus.ACTIVE),
-    ("Juhu Tara Rd",                  "MUM-JTR-02", "Juhu Tara Rd, opp. Holiday Inn",      19.0972, 72.8265, CameraStatus.ACTIVE),
-    ("Linking Rd, Khar West",         "MUM-LNK-05", "Linking Rd, Khar W Pali Naka",        19.0760, 72.8350, CameraStatus.ACTIVE),
-    ("LBS Marg, Kurla",               "MUM-LBS-02", "LBS Marg, Kurla W Bus Depot",         19.0700, 72.8830, CameraStatus.ERROR),
+    # (name, camera_id, location, lat, lng, status) — Pune Smart Mobility Pilot
+    ("Katraj Chowk — NH-48",          "PUN-KTJ-11", "Satara Rd, Katraj Chowk",            18.4575, 73.8508, CameraStatus.ACTIVE),
+    ("FC Road — Shivajinagar",        "PUN-FCR-07", "FC Rd × Shivajinagar",               18.5286, 73.8412, CameraStatus.ACTIVE),
+    ("Old Mumbai Hwy — Pimpri",       "PUN-PCM-03", "Old Mumbai–Pune Hwy, Pimpri",        18.6298, 73.7997, CameraStatus.ACTIVE),
+    ("Baner Road — Aundh Junction",   "PUN-BNR-04", "Baner Rd, Aundh Junction",           18.5590, 73.7868, CameraStatus.ACTIVE),
+    ("JM Road — Deccan Gymkhana",     "PUN-JMR-06", "JM Rd, Deccan Gymkhana",             18.5167, 73.8415, CameraStatus.ACTIVE),
+    ("North Main Rd — Koregaon Park", "PUN-KP-08",  "North Main Rd, Koregaon Park",       18.5362, 73.8939, CameraStatus.ACTIVE),
+    ("Wakad Expressway Exit",         "PUN-WKD-02", "Expressway Exit, Wakad Flyover",     18.5980, 73.7620, CameraStatus.ACTIVE),
+    ("University Circle",             "PUN-SHN-05", "Ganeshkhind Rd, University Circle",  18.5530, 73.8295, CameraStatus.MAINTENANCE),
+    ("Kharadi Bypass — Nagar Rd",     "PUN-KHD-09", "Nagar Rd Bypass, Kharadi",           18.5515, 73.9345, CameraStatus.ACTIVE),
+    ("Swargate Junction",             "PUN-SWG-10", "Satara Rd, Swargate Junction",       18.5018, 73.8587, CameraStatus.ACTIVE),
+    ("Hinjewadi Phase 2 Gate",        "PUN-HJW-01", "Hinjewadi IT Park Ph 2, Main Gate",  18.5867, 73.6890, CameraStatus.ACTIVE),
+    ("Magarpatta Rd — Hadapsar",      "PUN-HDP-12", "Magarpatta Rd, Hadapsar",            18.5089, 73.9260, CameraStatus.ERROR),
 ]
 
 INDIAN_FIRST_NAMES = [
@@ -120,7 +120,7 @@ async def _mark_seeded(session) -> None:
 
 def _make_plate() -> str:
     # MH XX 1234 AB style (no spaces stored)
-    rto_codes = ["01", "02", "03", "04", "05", "12", "14", "43", "46", "47"]
+    rto_codes = ["12", "14", "12", "14", "12", "14", "01", "02", "04", "43"]
     letters = "ABCDEFGHJKLMNPQRSTUVWXYZ"
     return f"MH{random.choice(rto_codes)}{random.choice(letters)}{random.choice(letters)}{random.randint(1000, 9999)}"
 
@@ -135,9 +135,9 @@ def _make_owner() -> Owner:
         name=name,
         email=f"{name.lower().replace(' ', '.')}{random.randint(1, 999)}@example.in",
         phone=_make_phone(),
-        city="Mumbai",
+        city="Pune",
         state="Maharashtra",
-        pincode=f"4000{random.randint(10, 99)}",
+        pincode=f"411{random.randint(1, 57):03d}",
         id_proof_type="Aadhaar",
         id_proof_number=f"{random.randint(1000, 9999)} {random.randint(1000, 9999)} {random.randint(1000, 9999)}",
     )
@@ -357,7 +357,7 @@ async def seed_demo_data() -> dict:
                     violation_type=v_type,
                     violation_description=f"AI-detected: {v_type.lower()} confirmed via ANPR + reg-database cross-check",
                     plate_number=veh.plate_number,
-                    location=next((c.location for c in cameras if c.id == d.camera_id), "Mumbai"),
+                    location=next((c.location for c in cameras if c.id == d.camera_id), "Pune"),
                     fine_amount=fine,
                     status=status,
                     issued_at=issued_at,

@@ -20,7 +20,7 @@ because:
 Realism rules
 ─────────────
   * Owner names, vehicle make/model, and city align with the plate's
-    state code (e.g. MH plates → Maharashtra owners and Mumbai/Pune RTOs).
+    state code (e.g. MH plates → Pune-region owners for the pilot theatre).
   * Expiry probabilities match the spec the user wrote: insurance 18%,
     PUC 22%, registration 9%, blacklisted 2%, otherwise clean.
   * When something expires, the "expiry date" is set to a plausible past
@@ -46,10 +46,10 @@ from app.ai.ocr import _is_bh_series, _is_morth_temp_series
 # Mapping is intentionally compact — we only need enough variation for the
 # generated dossier to feel anchored to the plate's region. Picking RTO
 # cities biased by the state's most common districts keeps demo plates
-# reading as Mumbai/Pune for MH, Bangalore for KA, etc.
+# reading as Pune-region for MH, Bangalore for KA, etc.
 
 _STATE_META: dict[str, dict] = {
-    "MH": {"state": "Maharashtra",   "cities": ["Mumbai", "Pune", "Nagpur", "Nashik", "Thane"]},
+    "MH": {"state": "Maharashtra",   "cities": ["Pune", "Pimpri-Chinchwad", "Hadapsar", "Aundh", "Kothrud"]},
     "DL": {"state": "Delhi",         "cities": ["New Delhi", "Dwarka", "Rohini"]},
     "KA": {"state": "Karnataka",     "cities": ["Bengaluru", "Mysuru", "Hubballi"]},
     "TN": {"state": "Tamil Nadu",    "cities": ["Chennai", "Coimbatore", "Madurai"]},
@@ -77,7 +77,7 @@ _STATE_META: dict[str, dict] = {
     "JH": {"state": "Jharkhand",     "cities": ["Ranchi"]},
     "CG": {"state": "Chhattisgarh",  "cities": ["Raipur"]},
     "DN": {"state": "Dadra & Nagar Haveli", "cities": ["Silvassa"]},
-    "BH": {"state": "Bharat",        "cities": ["New Delhi RTO", "Mumbai RTO", "Bengaluru RTO", "Chennai RTO", "Hyderabad RTO"]},
+    "BH": {"state": "Bharat",        "cities": ["New Delhi RTO", "Pune RTO", "Bengaluru RTO", "Chennai RTO", "Hyderabad RTO"]},
 }
 
 _DEFAULT_STATE = {"state": "India", "cities": ["Unspecified RTO"]}
