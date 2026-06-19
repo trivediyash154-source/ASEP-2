@@ -109,41 +109,104 @@ function redirectToLoginOnce(): void {
   window.location.href = "/login";
 }
 
+// Password the persona cards authenticate with. Kept in sync with the demo
+// persona registry (auth.store.ts DEMO_PASSWORD).
+const DEMO_PASSWORD = "Admin@1234";
+
+/** Email of the active local demo persona, read straight from storage so this
+ *  module stays free of an import cycle with the auth store / demo-session. */
+function demoSessionEmail(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem("vaahan.demo-session");
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { email?: string };
+    return parsed?.email ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Self-heal a stale demo session.
+ *
+ * Returning operators can land on the dashboard with a `vaahan.demo-session`
+ * but NO valid backend JWT (token expired, or the backend was down when they
+ * first logged in). Without this, every data query 401s forever and the pages
+ * sit in perpetual skeletons. Since the persona credentials are known and all
+ * personas authenticate, we mint a fresh JWT on demand and retry the request.
+ * Returns the new access token, or null if there is no demo session to heal.
+ */
+async function mintTokenFromDemo(): Promise<string | null> {
+  const email = demoSessionEmail();
+  if (!email) return null;
+  try {
+    const { data } = await axios.post(`${getApiUrl()}${API_PREFIX}/auth/login`, {
+      email,
+      password: DEMO_PASSWORD,
+    });
+    if (data?.access_token && data?.refresh_token) {
+      setTokens(data.access_token, data.refresh_token);
+      return data.access_token;
+    }
+  } catch {
+    /* fall through — caller handles null */
+  }
+  return null;
+}
+
+/** Obtain a fresh access token: try the refresh-token rotation first, then fall
+ *  back to re-minting from the demo persona. Null if neither is possible. */
+async function obtainNewToken(): Promise<string | null> {
+  const refreshToken = getRefreshToken();
+  if (refreshToken) {
+    try {
+      const { data } = await axios.post(`${getApiUrl()}${API_PREFIX}/auth/refresh`, {
+        refresh_token: refreshToken,
+      });
+      if (data?.access_token && data?.refresh_token) {
+        setTokens(data.access_token, data.refresh_token);
+        return data.access_token;
+      }
+    } catch {
+      /* fall through to demo mint */
+    }
+  }
+  return mintTokenFromDemo();
+}
+
 apiClient.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
     const original = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
 
-    if (error.response?.status === 401 && !original._retry) {
+    if (error.response?.status === 401 && original && !original._retry) {
+      // De-dupe concurrent 401s: only one token acquisition runs; the rest
+      // queue and replay once it resolves (or reject if it couldn't).
       if (isRefreshing) {
-        return new Promise((resolve) => {
+        return new Promise((resolve, reject) => {
           refreshSubscribers.push((token) => {
-            original.headers.Authorization = `Bearer ${token}`;
-            resolve(apiClient(original));
+            if (token) {
+              original.headers.Authorization = `Bearer ${token}`;
+              resolve(apiClient(original));
+            } else {
+              reject(error);
+            }
           });
         });
       }
 
       original._retry = true;
       isRefreshing = true;
-
-      const refreshToken = getRefreshToken();
-      if (!refreshToken) {
-        clearTokens();
-        redirectToLoginOnce();
-        return Promise.reject(error);
-      }
-
       try {
-        const { data } = await axios.post(`${getApiUrl()}${API_PREFIX}/auth/refresh`, {
-          refresh_token: refreshToken,
-        });
-        setTokens(data.access_token, data.refresh_token);
-        refreshSubscribers.forEach((cb) => cb(data.access_token));
+        const newToken = await obtainNewToken();
+        refreshSubscribers.forEach((cb) => cb(newToken ?? ""));
         refreshSubscribers = [];
-        original.headers.Authorization = `Bearer ${data.access_token}`;
-        return apiClient(original);
-      } catch {
+        if (newToken) {
+          original.headers.Authorization = `Bearer ${newToken}`;
+          return apiClient(original);
+        }
+        // Could not refresh and no demo session to mint from → real logout.
         clearTokens();
         redirectToLoginOnce();
         return Promise.reject(error);

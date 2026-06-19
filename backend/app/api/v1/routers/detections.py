@@ -64,7 +64,7 @@ async def list_detections(
 
 @router.get("/recent")
 async def get_recent_detections(
-    limit: int = Query(20, ge=1, le=100),
+    limit: int = Query(20, ge=1, le=500),
     camera_id: str | None = Query(None, description="UUID of a specific camera to filter by"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),

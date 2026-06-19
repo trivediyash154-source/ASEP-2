@@ -33,6 +33,11 @@ async def lifespan(app: FastAPI):
     configure_logging()
     logger.info("enforcement_platform_starting", version=settings.APP_VERSION, env=settings.APP_ENV)
 
+    # Cap native inference thread pools BEFORE torch/cv2 do any heavy work, so
+    # YOLO/EasyOCR/OpenCV can't fan out across every core and starve the loop.
+    from app.core.stability import configure_runtime_limits
+    configure_runtime_limits()
+
     # First-boot bootstrap: idempotent migrations + demo user seeding.
     # Skipped automatically in production (operators run alembic manually
     # against a managed DB), but ensures dev/demo starts work out of the box.

@@ -63,6 +63,7 @@ from app.ai.detector import vehicle_detector, BoundingBox, DetectionResult
 from app.ai.evidence_store import save_frame_async, save_plate_crop_async
 from app.ai.ocr import plate_ocr, _normalize_plate, _is_bh_series, _is_morth_temp_series
 from app.ai.preprocessor import preprocess_plate_crop
+from app.core import stability
 from app.core.constants import ChallanStatus, DetectionStatus, FINE_AMOUNTS
 from app.core.logging import get_logger
 from app.db.session import AsyncSessionFactory
@@ -90,6 +91,11 @@ logger = get_logger(__name__)
 
 # ── Tunables ─────────────────────────────────────────────────────────
 LOOP_TARGET_FPS = 12              # cap the pipeline to keep CPU sane
+# Hard cap on the longest side of the frame fed to YOLO + downstream OCR. Any
+# camera (a 1080p/4K RTSP source, a high-res phone) is downscaled to this once
+# per tick, so per-frame compute + memory is bounded regardless of source size.
+# YOLO resizes internally anyway; a plate stays detectable far below this.
+PROCESS_MAX_SIDE = 1280
 TRACK_IOU_MATCH = 0.30            # IoU between consecutive frames to consider same track
 TRACK_TIMEOUT_S = 2.5             # forget a track if not seen for this long
 OCR_FIRST_FRAME_FALLBACK = 6      # OCR a track this many frames after first sight even without stability
@@ -98,6 +104,17 @@ OCR_RELOCK_AFTER_S = 25.0         # re-OCR a long-lived track every N seconds (h
 DEDUPE_WINDOW_S = 90              # within this window, same plate from same camera = 1 detection
 MAX_RECENT_PLATES_CACHE = 256     # LRU bound on the dedupe cache
 FALLBACK_COOLDOWN_S = 0.35        # min seconds between handheld-plate full-frame OCR scans (lowered for snappier hold-up demo)
+# Hard cap on the longest side of each handheld ROI handed to OCR.
+#
+# The handheld fallback OCRs near-full-frame ROIs (a plate held to a phone /
+# IP-Webcam). At the global OCR cap (960px) each EasyOCR pass on a text-busy
+# live frame ran 3-6.5s AND spiked the PyTorch CPU allocator — repeated every
+# FALLBACK_COOLDOWN_S, that walked the backend past its 4G container limit and
+# got it OOM-killed (the whole site appearing to "crash" when a phone camera was
+# connected). A held-up plate is fully legible far below this, so capping the ROI
+# here costs no accuracy but ~3-4x the speed and peak memory. Bbox stays in
+# original frame coords (only the OCR input is downscaled), so overlays align.
+HANDHELD_OCR_MAX_SIDE = 512
 
 # ── Demo guarantee ───────────────────────────────────────────────────
 # When ON (default in dev), if the normal reliable-read path doesn't fire we
@@ -221,6 +238,7 @@ class _PipelineStats:
     yolo_runs: int = 0
     vehicles_seen: int = 0
     ocr_attempts: int = 0
+    ocr_dropped: int = 0          # frames where OCR was skipped because the gate was busy
     ocr_reliable: int = 0
     detections_persisted: int = 0
     detections_deduped: int = 0
@@ -514,6 +532,12 @@ async def _pipeline_tick(
 
     handle.stats.frames_processed += 1
 
+    # Bound per-frame compute/memory for ANY source resolution. A high-res
+    # camera is downscaled once here; everything downstream (YOLO, OCR crops,
+    # evidence, the payload's frame_dimensions) then works in these coords, so
+    # overlays stay aligned.
+    frame = _cap_longest_side_local(frame, PROCESS_MAX_SIDE)
+
     # ── YOLO every frame ─────────────────────────────────────
     t_yolo = time.perf_counter()
     try:
@@ -558,12 +582,34 @@ async def _pipeline_tick(
     # tuple: (text, conf, crop, detection_for_overlay)
     guarantee_candidate: Optional[tuple] = None
 
+    # OCR concurrency gate: never start a second heavy OCR while one is already
+    # running (this camera OR any other). If busy, the frame is DROPPED for OCR
+    # purposes — tracking + streaming continue, we just skip the read this tick.
+    # This is the guarantee that the live pipeline cannot stack multi-second,
+    # memory-spiking OCR passes and overwhelm the backend.
+    if track_to_ocr is not None and stability.OCR_GATE.locked():
+        handle.stats.ocr_dropped += 1
+        track_to_ocr = None
+
     if track_to_ocr is not None:
         track, det = track_to_ocr
         t_ocr = time.perf_counter()
+        await stability.OCR_GATE.acquire()
         try:
             ocr_text, ocr_conf, ocr_engine, ocr_quality, ocr_reliable, plate_crop = (
-                await _ocr_on_detection(frame, det)
+                await asyncio.wait_for(
+                    _ocr_on_detection(frame, det),
+                    timeout=stability.OCR_HARD_TIMEOUT_S,
+                )
+            )
+        except asyncio.TimeoutError:
+            handle.stats.last_error = "ocr: hard-timeout"
+            logger.error(
+                "demo_ocr_timeout", camera_id=camera_id,
+                timeout_s=stability.OCR_HARD_TIMEOUT_S,
+            )
+            ocr_text, ocr_conf, ocr_engine, ocr_quality, ocr_reliable, plate_crop = (
+                None, 0.0, None, 0.0, False, None
             )
         except Exception as exc:
             handle.stats.last_error = f"ocr: {exc}"
@@ -571,6 +617,8 @@ async def _pipeline_tick(
             ocr_text, ocr_conf, ocr_engine, ocr_quality, ocr_reliable, plate_crop = (
                 None, 0.0, None, 0.0, False, None
             )
+        finally:
+            stability.OCR_GATE.release()
         handle.stats.last_ocr_ms = round((time.perf_counter() - t_ocr) * 1000, 1)
         handle.stats.ocr_attempts += 1
         track.last_ocr_at = now
@@ -618,17 +666,33 @@ async def _pipeline_tick(
     fallback_det: Optional[DetectionResult] = None
     if (not ocr_reliable) and (not detections):
         last_fb = state.get("last_fallback_at", 0.0)
-        if (now - last_fb) >= FALLBACK_COOLDOWN_S:
+        # Same OCR gate as the track path: skip the (expensive) handheld scan
+        # entirely if any OCR is already running.
+        if (now - last_fb) >= FALLBACK_COOLDOWN_S and not stability.OCR_GATE.locked():
             state["last_fallback_at"] = now
             t_fb = time.perf_counter()
+            await stability.OCR_GATE.acquire()
             try:
                 (fb_text, fb_conf, fb_engine, fb_quality, fb_reliable,
-                 fb_crop, fb_bbox) = await _ocr_handheld_fallback(frame)
+                 fb_crop, fb_bbox) = await asyncio.wait_for(
+                    _ocr_handheld_fallback(frame),
+                    timeout=stability.OCR_HARD_TIMEOUT_S,
+                )
+            except asyncio.TimeoutError:
+                handle.stats.last_error = "fallback: hard-timeout"
+                logger.error(
+                    "demo_handheld_ocr_timeout", camera_id=camera_id,
+                    timeout_s=stability.OCR_HARD_TIMEOUT_S,
+                )
+                fb_text, fb_conf, fb_engine, fb_quality, fb_reliable, fb_crop, fb_bbox = (
+                    None, 0.0, None, 0.0, False, None, None)
             except Exception as exc:
                 handle.stats.last_error = f"fallback: {exc}"
                 logger.error("demo_fallback_ocr_failed", camera_id=camera_id, error=str(exc))
                 fb_text, fb_conf, fb_engine, fb_quality, fb_reliable, fb_crop, fb_bbox = (
                     None, 0.0, None, 0.0, False, None, None)
+            finally:
+                stability.OCR_GATE.release()
             handle.stats.last_ocr_ms = round((time.perf_counter() - t_fb) * 1000, 1)
             handle.stats.ocr_attempts += 1
 
@@ -765,16 +829,28 @@ async def _pipeline_tick(
                 handle.stats.last_plate_at = now
                 _remember(handle.recent_plates, ocr_text, now)
 
-                # Fire-and-forget evidence save (does not block the loop)
-                asyncio.create_task(_save_evidence(
-                    camera_id=camera_id,
-                    detection_id=str(detection_id),
-                    frame=frame.copy(),  # copy — the buffer is shared
-                    plate_crop=plate_crop,
-                    plate_text=ocr_text,
-                    detections=detections,
-                    stats=handle.stats,
-                ))
+                # Fire-and-forget evidence save (does not block the loop).
+                # Bounded + tracked: if too many writes are already in flight
+                # (slow disk), this one is DROPPED rather than queued, so frame
+                # copies can never accumulate into a memory leak.
+                spawned = stability.spawn_background(
+                    _save_evidence(
+                        camera_id=camera_id,
+                        detection_id=str(detection_id),
+                        frame=frame.copy(),  # copy — the buffer is shared
+                        plate_crop=plate_crop,
+                        plate_text=ocr_text,
+                        detections=detections,
+                        stats=handle.stats,
+                    ),
+                    name=f"evidence:{detection_id}",
+                )
+                if spawned is None:
+                    logger.warning(
+                        "demo_evidence_dropped_backpressure",
+                        camera_id=camera_id, detection_id=str(detection_id),
+                        inflight=stability.background_task_count(),
+                    )
 
     # ── Broadcast frame payload ──────────────────────────────
     loop_ms = (time.perf_counter() - loop_start) * 1000.0
@@ -907,6 +983,21 @@ async def _ocr_on_detection(
     )
 
 
+def _cap_longest_side_local(img: np.ndarray, max_side: int) -> np.ndarray:
+    """Downscale so the longest side is <= ``max_side``; never upscale."""
+    if img is None or img.size == 0:
+        return img
+    h, w = img.shape[:2]
+    longest = max(h, w)
+    if longest <= max_side:
+        return img
+    scale = max_side / float(longest)
+    return cv2.resize(
+        img, (max(1, int(round(w * scale))), max(1, int(round(h * scale)))),
+        interpolation=cv2.INTER_AREA,
+    )
+
+
 async def _ocr_handheld_fallback(
     frame: np.ndarray,
 ) -> tuple[Optional[str], float, Optional[str], float, bool, Optional[np.ndarray], Optional[BoundingBox]]:
@@ -937,8 +1028,13 @@ async def _ocr_handheld_fallback(
         crop = frame[cy1:cy2, cx1:cx2]
         if crop.size == 0:
             continue
+        # Downscale the OCR input only (the returned bbox/crop stay full-res so
+        # overlays + evidence are unaffected). This is the guard that stops a
+        # live full-frame OCR pass from spiking CPU/memory and OOM-killing the
+        # backend — see HANDHELD_OCR_MAX_SIDE.
+        ocr_crop = _cap_longest_side_local(crop, HANDHELD_OCR_MAX_SIDE)
         try:
-            prepped = await asyncio.to_thread(preprocess_plate_crop, crop)
+            prepped = await asyncio.to_thread(preprocess_plate_crop, ocr_crop)
             result = await asyncio.to_thread(plate_ocr.read_plate, prepped)
         except Exception as exc:
             logger.error("demo_handheld_ocr_exception", error=str(exc))
